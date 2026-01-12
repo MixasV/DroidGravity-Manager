@@ -816,10 +816,85 @@ pub async fn handle_responses(
         }
     }
 
-    // Factory Droid sends requests to /v1/responses
-    // Just pass through to handle_chat_completions which returns OpenAI format
-    debug!("[Factory Droid] Proxying to handle_chat_completions");
-    handle_chat_completions(State(state), Json(body)).await
+    // Get response from Gemini via handle_chat_completions
+    debug!("[Factory Droid] Calling handle_chat_completions for Gemini");
+    let chat_result = handle_chat_completions(State(state), Json(body)).await?;
+    let response = chat_result.into_response();
+    
+    // Extract response body
+    let (parts, body) = response.into_parts();
+    let response_bytes = match axum::body::to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read response: {}", e),
+            ));
+        }
+    };
+    
+    let chat_json: Value = match serde_json::from_slice(&response_bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to parse chat response: {}", e),
+            ));
+        }
+    };
+    
+    // Convert OpenAI Chat Completions format to Anthropic Messages format
+    // Factory Droid expects Anthropic format (like Claude), not OpenAI!
+    // OpenAI: { "choices": [{ "message": { "content": "..." } }] }
+    // Anthropic: { "content": [{ "type": "text", "text": "..." }] }
+    
+    let content_text = chat_json
+        .get("choices")
+        .and_then(|v| v.get(0))
+        .and_then(|choice| choice.get("message"))
+        .and_then(|msg| msg.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string();
+    
+    let response_id = chat_json
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("msg_unknown")
+        .to_string();
+    
+    let model = chat_json
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("gemini")
+        .to_string();
+    
+    // Build Anthropic Messages API format (like Claude returns)
+    let anthropic_response = json!({
+        "id": response_id,
+        "type": "message",
+        "role": "assistant",
+        "content": [{
+            "type": "text",
+            "text": content_text
+        }],
+        "model": model,
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "usage": {
+            "input_tokens": chat_json.get("usage")
+                .and_then(|u| u.get("prompt_tokens"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            "output_tokens": chat_json.get("usage")
+                .and_then(|u| u.get("completion_tokens"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        }
+    });
+    
+    debug!("[Factory Droid] Converted to Anthropic Messages format");
+    Ok(Json(anthropic_response).into_response())
 }
 
 pub async fn handle_images_generations(

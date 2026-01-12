@@ -820,14 +820,16 @@ pub async fn handle_responses(
     }
 
     // Delegate to handle_chat_completions to get Gemini response
-    let chat_response = handle_chat_completions(State(state), Json(body)).await?;
+    let chat_result = handle_chat_completions(State(state), Json(body)).await?;
+    let response = chat_result.into_response();
     
     // Convert Chat Completion response to Text Completion format for Factory Droid
     // Factory Droid expects { "choices": [{ "text": "...", "finish_reason": "stop" }] }
     // Not { "choices": [{ "message": { "content": "..." } }] }
     
     // Extract response body
-    let response_bytes = match axum::body::to_bytes(chat_response.into_body(), usize::MAX).await {
+    let (parts, body) = response.into_parts();
+    let response_bytes = match axum::body::to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(e) => {
             return Err((

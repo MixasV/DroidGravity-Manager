@@ -67,8 +67,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Antigravity Tools ${{ github.ref_name }}"
-          releaseBody: "See the assets to download this version and install."
-          releaseDraft: true
+          releaseName: "DroidGravity Manager ${{ github.ref_name }}"
+          releaseBody: |
+            ## 🚀 DroidGravity Manager ${{ github.ref_name }}
+            
+            Factory Droid integration for Antigravity Manager
+            
+            ### 🆕 What's New
+            - Factory Droid request format support
+            - Automatic conversion of `input` → `messages`
+            - Pre-configured model settings for Gemini and Claude
+            - Full compatibility with original Antigravity Manager
+            
+            ### 📦 Downloads
+            - **Windows**: `.msi` or `.exe` installer
+            - **macOS**: `.dmg` or `.app` (Intel and Apple Silicon)
+            - **Linux**: `.AppImage` or `.deb`
+            
+            ### 📝 Setup Guide
+            See [README](https://github.com/${{ github.repository }}) for installation and configuration instructions.
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

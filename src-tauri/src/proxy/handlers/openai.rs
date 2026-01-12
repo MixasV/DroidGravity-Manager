@@ -289,10 +289,13 @@ pub async fn handle_completions(
         body
     );
 
-    let is_codex_style = body.get("input").is_some() && body.get("instructions").is_some();
+    // Support Factory Droid format: "input" field with or without "instructions"
+    let has_input = body.get("input").is_some();
+    let is_codex_style = has_input && body.get("instructions").is_some();
+    let is_factory_droid = has_input && !is_codex_style;
 
     // 1. Convert Payload to Messages (Shared Chat Format)
-    if is_codex_style {
+    if is_codex_style || is_factory_droid {
         let instructions = body
             .get("instructions")
             .and_then(|v| v.as_str())
@@ -342,69 +345,89 @@ pub async fn handle_completions(
         if let Some(items) = input_items {
             for item in items {
                 let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                match item_type {
-                    "message" => {
-                        let role = item.get("role").and_then(|v| v.as_str()).unwrap_or("user");
-                        let content = item.get("content").and_then(|v| v.as_array());
-                        let mut text_parts = Vec::new();
-                        let mut image_parts: Vec<Value> = Vec::new();
+                
+                // Factory Droid special case: no "type" field, but has "role" directly
+                let has_role_field = item.get("role").is_some();
+                let role = item.get("role").and_then(|v| v.as_str()).unwrap_or("user");
+                
+                // Match by type OR if no type but has role (Factory Droid format)
+                if item_type == "input_text" {
+                    // Simple input_text format
+                    if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
+                        messages.push(json!({
+                            "role": "user",
+                            "content": text
+                        }));
+                        debug!("[Factory Droid] Converted input_text to user message");
+                    }
+                } else if item_type == "message" || (item_type.is_empty() && has_role_field) {
+                    // Codex style "message" or Factory Droid format with role but no type
+                    let content = item.get("content").and_then(|v| v.as_array());
+                    let mut text_parts = Vec::new();
+                    let mut image_parts: Vec<Value> = Vec::new();
 
-                        if let Some(parts) = content {
-                            for part in parts {
-                                // 处理文本块
+                    if let Some(parts) = content {
+                        for part in parts {
+                            // Factory Droid: type: "input_text"
+                            if part.get("type").and_then(|v| v.as_str()) == Some("input_text") {
                                 if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
                                     text_parts.push(text.to_string());
-                                }
-                                // [NEW] 处理图像块 (Codex input_image 格式)
-                                else if part.get("type").and_then(|v| v.as_str())
-                                    == Some("input_image")
-                                {
-                                    if let Some(image_url) =
-                                        part.get("image_url").and_then(|v| v.as_str())
-                                    {
-                                        image_parts.push(json!({
-                                            "type": "image_url",
-                                            "image_url": { "url": image_url }
-                                        }));
-                                        debug!("[Codex] Found input_image: {}", image_url);
-                                    }
-                                }
-                                // [NEW] 兼容标准 OpenAI image_url 格式
-                                else if part.get("type").and_then(|v| v.as_str())
-                                    == Some("image_url")
-                                {
-                                    if let Some(url_obj) = part.get("image_url") {
-                                        image_parts.push(json!({
-                                            "type": "image_url",
-                                            "image_url": url_obj.clone()
-                                        }));
-                                    }
+                                    debug!("[Factory Droid] Found input_text in content");
                                 }
                             }
-                        }
-
-                        // 构造消息内容：如果有图像则使用数组格式
-                        if image_parts.is_empty() {
-                            messages.push(json!({
-                                "role": role,
-                                "content": text_parts.join("\n")
-                            }));
-                        } else {
-                            let mut content_blocks: Vec<Value> = Vec::new();
-                            if !text_parts.is_empty() {
-                                content_blocks.push(json!({
-                                    "type": "text",
-                                    "text": text_parts.join("\n")
-                                }));
+                            // Standard text field (Codex format)
+                            else if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
+                                text_parts.push(text.to_string());
                             }
-                            content_blocks.extend(image_parts);
-                            messages.push(json!({
-                                "role": role,
-                                "content": content_blocks
-                            }));
+                            // [NEW] 处理图像块 (Codex input_image 格式)
+                            else if part.get("type").and_then(|v| v.as_str())
+                                == Some("input_image")
+                            {
+                                if let Some(image_url) =
+                                    part.get("image_url").and_then(|v| v.as_str())
+                                {
+                                    image_parts.push(json!({
+                                        "type": "image_url",
+                                        "image_url": { "url": image_url }
+                                    }));
+                                    debug!("[Codex] Found input_image: {}", image_url);
+                                }
+                            }
+                            // [NEW] 兼容标准 OpenAI image_url 格式
+                            else if part.get("type").and_then(|v| v.as_str())
+                                == Some("image_url")
+                            {
+                                if let Some(url_obj) = part.get("image_url") {
+                                    image_parts.push(json!({
+                                        "type": "image_url",
+                                        "image_url": url_obj.clone()
+                                    }));
+                                }
+                            }
                         }
                     }
-                    "function_call" | "local_shell_call" | "web_search_call" => {
+
+                    // 构造消息内容：如果有图像则使用数组格式
+                    if image_parts.is_empty() {
+                        messages.push(json!({
+                            "role": role,
+                            "content": text_parts.join("\n")
+                        }));
+                    } else {
+                        let mut content_blocks: Vec<Value> = Vec::new();
+                        if !text_parts.is_empty() {
+                            content_blocks.push(json!({
+                                "type": "text",
+                                "text": text_parts.join("\n")
+                            }));
+                        }
+                        content_blocks.extend(image_parts);
+                        messages.push(json!({
+                            "role": role,
+                            "content": content_blocks
+                        }));
+                    }
+                } else if item_type == "function_call" || item_type == "local_shell_call" || item_type == "web_search_call" {
                         let mut name = item
                             .get("name")
                             .and_then(|v| v.as_str())
@@ -472,8 +495,8 @@ pub async fn handle_completions(
                                 }
                             ]
                         }));
-                    }
-                    "function_call_output" | "custom_tool_call_output" => {
+                    } // This closing brace was missing
+                else if item_type == "function_call_output" || item_type == "custom_tool_call_output" {
                         let call_id = item
                             .get("call_id")
                             .and_then(|v| v.as_str())

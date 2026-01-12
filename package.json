@@ -1,7 +1,7 @@
 {
-  "name": "antigravity-tools",
+  "name": "droidgravity-manager",
   "private": true,
-  "version": "3.3.21",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

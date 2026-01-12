@@ -1,0 +1,137 @@
+{
+    "cloudSessionSync": true,
+    "diffMode": "github",
+    "enableCompletionBell": false,
+    "completionSound": "fx-ok01",
+    "awaitingInputSound": "fx-ack01",
+    "soundFocusMode": "always",
+    "includeCoAuthoredByDroid": false,
+    "enableDroidShield": true,
+    "todoDisplayMode": "inline",
+    "allowBackgroundProcesses": false,
+    "showThinkingInMainView": false,
+    "ideAutoConnect": false,
+    "showTokenUsageIndicator": false,
+    "enableWarmup": true,
+    "enableCustomDroids": true,
+    "enableReadinessReport": false,
+    "enableHooks": false,
+    "customModels": [
+        {
+            "model": "gemini-3-flash",
+            "id": "gemini-3-flash-0",
+            "index": 0,
+            "baseUrl": "http://127.0.0.1:8045/v1",
+            "apiKey": "sk-...",
+            "displayName": "Gemini 3 Flash",
+            "maxOutputTokens": 24576,
+            "noImageSupport": false,
+            "provider": "openai"
+        },
+        {
+            "model": "gemini-3-pro-high",
+            "id": "gemini-3-pro-high-1",
+            "index": 1,
+            "baseUrl": "http://127.0.0.1:8045/v1",
+            "apiKey": "sk-...",
+            "displayName": "Gemini 3 Pro High",
+            "maxOutputTokens": 32768,
+            "noImageSupport": false,
+            "provider": "openai"
+        },
+        {
+            "model": "gemini-3-pro-low",
+            "id": "gemini-3-pro-low-2",
+            "index": 2,
+            "baseUrl": "http://127.0.0.1:8045/v1",
+            "apiKey": "sk-...",
+            "displayName": "Gemini 3 Pro Low",
+            "maxOutputTokens": 32768,
+            "noImageSupport": false,
+            "provider": "openai"
+        },
+        {
+            "model": "gemini-2.5-flash",
+            "id": "gemini-2-5-flash-3",
+            "index": 3,
+            "baseUrl": "http://127.0.0.1:8045/v1",
+            "apiKey": "sk-...",
+            "displayName": "Gemini 2.5 Flash",
+            "maxOutputTokens": 24576,
+            "noImageSupport": false,
+            "provider": "openai"
+        },
+        {
+            "model": "gemini-2.5-flash-lite",
+            "id": "gemini-2-5-flash-lite-4",
+            "index": 4,
+            "baseUrl": "http://127.0.0.1:8045/v1",
+            "apiKey": "sk-...",
+            "displayName": "Gemini 2.5 Flash Lite",
+            "maxOutputTokens": 24576,
+            "noImageSupport": false,
+            "provider": "openai"
+        },
+        {
+            "model": "gemini-2.5-pro",
+            "id": "gemini-2-5-pro-5",
+            "index": 5,
+            "baseUrl": "http://127.0.0.1:8045/v1",
+            "apiKey": "sk-...",
+            "displayName": "Gemini 2.5 Pro",
+            "maxOutputTokens": 32768,
+            "noImageSupport": false,
+            "provider": "openai"
+        },
+        {
+            "model": "gemini-2.5-flash-thinking",
+            "id": "gemini-2-5-flash-thinking-6",
+            "index": 6,
+            "baseUrl": "http://127.0.0.1:8045/v1",
+            "apiKey": "sk-...",
+            "displayName": "Gemini 2.5 Flash (Thinking)",
+            "maxOutputTokens": 24576,
+            "noImageSupport": false,
+            "provider": "openai"
+        },
+        {
+            "model": "claude-sonnet-4-5",
+            "id": "claude-sonnet-4-5-7",
+            "index": 7,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Claude 4.5 Sonnet",
+            "maxOutputTokens": 8192,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "claude-sonnet-4-5-thinking",
+            "id": "claude-sonnet-4-5-thinking-8",
+            "index": 8,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Claude 4.5 Sonnet (Thinking)",
+            "maxOutputTokens": 16384,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "claude-opus-4-5-thinking",
+            "id": "claude-opus-4-5-thinking-9",
+            "index": 9,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Claude 4.5 Opus (Thinking)",
+            "maxOutputTokens": 16384,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        }
+    ],
+    "sessionDefaultSettings": {
+        "model": "gemini-3-flash-0",
+        "reasoningEffort": "none",
+        "autonomyMode": "auto-high"
+    },
+    "logoAnimation": "off"
+}

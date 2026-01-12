@@ -839,7 +839,11 @@ pub async fn handle_responses(
         }
     };
     
-    let mut chat_json: Value = match serde_json::from_slice(&response_bytes) {
+    // Convert Chat Completion response to OpenAI Responses API format for Factory Droid
+    // Factory Droid expects: { "id": "...", "object": "response", "output": [{ "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "..." }] }] }
+    // Not: { "choices": [{ "message": { "content": "..." } }] }
+    
+    let chat_json: Value = match serde_json::from_slice(&response_bytes) {
         Ok(v) => v,
         Err(e) => {
             return Err((
@@ -849,34 +853,54 @@ pub async fn handle_responses(
         }
     };
     
-    // Convert message.content to text field
-    if let Some(choices) = chat_json.get_mut("choices").and_then(|v| v.as_array_mut()) {
-        for choice in choices {
-            // First, extract content (immutable borrow)
-            let content_str = choice
-                .get("message")
-                .and_then(|msg| msg.get("content"))
-                .and_then(|c| c.as_str())
-                .map(|s| s.to_string());
-            
-            // Then, mutate choice (mutable borrow)
-            if let Some(content) = content_str {
-                if let Some(choice_obj) = choice.as_object_mut() {
-                    choice_obj.remove("message");
-                    choice_obj.insert("text".to_string(), json!(content));
-                    choice_obj.insert("logprobs".to_string(), json!(null));
-                }
+    // Extract content from chat completion format
+    let content_text = chat_json
+        .get("choices")
+        .and_then(|v| v.get(0))
+        .and_then(|choice| choice.get("message"))
+        .and_then(|msg| msg.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string();
+    
+    let response_id = chat_json
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("resp_unknown")
+        .to_string();
+    
+    let model = chat_json
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("gemini")
+        .to_string();
+    
+    // Build OpenAI Responses API format
+    let responses_api_response = json!({
+        "id": response_id,
+        "object": "response",
+        "created_at": chrono::Utc::now().timestamp(),
+        "status": "completed",
+        "model": model,
+        "output": [
+            {
+                "type": "message",
+                "id": format!("msg_{}", uuid::Uuid::new_v4()),
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": content_text
+                    }
+                ]
             }
-        }
-    }
+        ],
+        "usage": chat_json.get("usage").cloned().unwrap_or(json!({}))
+    });
     
-    // Change object type from chat.completion to text_completion
-    if let Some(obj) = chat_json.as_object_mut() {
-        obj.insert("object".to_string(), json!("text_completion"));
-    }
-    
-    debug!("[Factory Droid] Converted to text completion format");
-    Ok(Json(chat_json).into_response())
+    debug!("[Factory Droid] Converted to OpenAI Responses API format");
+    Ok(Json(responses_api_response).into_response())
 }
 
 pub async fn handle_images_generations(

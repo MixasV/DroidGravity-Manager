@@ -531,7 +531,6 @@ pub async fn handle_completions(
                             "content": output_str
                         }));
                     }
-                }
             }
         }
 

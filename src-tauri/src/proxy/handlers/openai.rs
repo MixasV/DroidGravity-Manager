@@ -813,6 +813,9 @@ pub async fn handle_responses(
             obj.remove("input");
             obj.remove("instructions");
             obj.insert("messages".to_string(), json!(messages));
+            // Force disable streaming for Factory Droid
+            // Factory Droid expects regular JSON response, not SSE stream
+            obj.insert("stream".to_string(), json!(false));
         }
     }
 

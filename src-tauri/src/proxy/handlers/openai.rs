@@ -819,8 +819,57 @@ pub async fn handle_responses(
         }
     }
 
-    // Delegate to handle_chat_completions
-    handle_chat_completions(State(state), Json(body)).await
+    // Delegate to handle_chat_completions to get Gemini response
+    let chat_response = handle_chat_completions(State(state), Json(body)).await?;
+    
+    // Convert Chat Completion response to Text Completion format for Factory Droid
+    // Factory Droid expects { "choices": [{ "text": "...", "finish_reason": "stop" }] }
+    // Not { "choices": [{ "message": { "content": "..." } }] }
+    
+    // Extract response body
+    let response_bytes = match axum::body::to_bytes(chat_response.into_body(), usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read response: {}", e),
+            ));
+        }
+    };
+    
+    let mut chat_json: Value = match serde_json::from_slice(&response_bytes) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to parse chat response: {}", e),
+            ));
+        }
+    };
+    
+    // Convert message.content to text field
+    if let Some(choices) = chat_json.get_mut("choices").and_then(|v| v.as_array_mut()) {
+        for choice in choices {
+            if let Some(message) = choice.get("message") {
+                if let Some(content) = message.get("content").and_then(|v| v.as_str()) {
+                    // Remove message field and add text field
+                    if let Some(choice_obj) = choice.as_object_mut() {
+                        choice_obj.remove("message");
+                        choice_obj.insert("text".to_string(), json!(content));
+                        choice_obj.insert("logprobs".to_string(), json!(null));
+                    }
+                }
+            }
+        }
+    }
+    
+    // Change object type from chat.completion to text_completion
+    if let Some(obj) = chat_json.as_object_mut() {
+        obj.insert("object".to_string(), json!("text_completion"));
+    }
+    
+    debug!("[Factory Droid] Converted to text completion format");
+    Ok(Json(chat_json).into_response())
 }
 
 pub async fn handle_images_generations(

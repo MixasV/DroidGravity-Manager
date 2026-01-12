@@ -11,7 +11,7 @@ DroidGravity Manager extends the original Antigravity Manager with automatic req
 ### Key Improvements
 
 - **Factory Droid Support**: Automatic conversion of Factory Droid's request format to OpenAI-compatible format
-- **Gemini Integration**: Full support for Google Gemini models (2.0 Flash, Exp, Thinking variants)
+- **Gemini Integration**: Full support for Google Gemini models (3 Flash, 3 Pro, 2.5 Flash, 2.5 Pro, Thinking variants)
 - **Claude Integration**: Native Anthropic API support for Claude 3.5 Sonnet and Opus
 - **Automatic Account Rotation**: Seamlessly switches between accounts when hitting rate limits
 - **No Manual Configuration**: Pre-configured model settings included
@@ -70,23 +70,23 @@ The compiled application will be in `src-tauri/target/release/`.
 {
   "customModels": [
     {
-      "model": "gemini-2.0-flash-exp",
-      "id": "custom:Gemini-2.0-Flash-Exp-0",
+      "model": "gemini-3-flash",
+      "id": "gemini-3-flash-0",
       "index": 0,
       "baseUrl": "http://127.0.0.1:8045/v1",
       "apiKey": "YOUR_DROIDGRAVITY_API_KEY_HERE",
-      "displayName": "Gemini 2.0 Flash Exp",
-      "maxOutputTokens": 8192,
+      "displayName": "Gemini 3 Flash",
+      "maxOutputTokens": 24576,
       "noImageSupport": false,
       "provider": "openai"
     },
     {
-      "model": "claude-3-5-sonnet-20241022",
-      "id": "custom:Claude-3.5-Sonnet-3",
-      "index": 3,
+      "model": "claude-sonnet-4-5",
+      "id": "claude-sonnet-4-5-7",
+      "index": 7,
       "baseUrl": "http://127.0.0.1:8045",
       "apiKey": "YOUR_DROIDGRAVITY_API_KEY_HERE",
-      "displayName": "Claude 3.5 Sonnet",
+      "displayName": "Claude 4.5 Sonnet",
       "maxOutputTokens": 8192,
       "noImageSupport": false,
       "provider": "anthropic"
@@ -102,7 +102,7 @@ The compiled application will be in `src-tauri/target/release/`.
 ### Step 3: Select Models in Factory Droid
 
 1. In your Factory Droid CLI, type: `/model`
-2. Select one of your custom models (e.g., "Gemini 2.0 Flash Exp" or "Claude 3.5 Sonnet")
+2. Select one of your custom models (e.g., "Gemini 3 Flash" or "Claude 4.5 Sonnet")
 3. Start chatting! DroidGravity will automatically manage account rotation and quotas
 
 ---
@@ -119,15 +119,18 @@ The compiled application will be in `src-tauri/target/release/`.
 ### Model Support
 
 **Google Gemini**:
-- Gemini 2.0 Flash Experimental
-- Gemini 2.0 Flash Thinking Experimental
-- Gemini Exp 1206
-- Custom model mappings via UI
+- Gemini 3 Flash
+- Gemini 3 Pro High
+- Gemini 3 Pro Low
+- Gemini 2.5 Flash
+- Gemini 2.5 Flash Lite
+- Gemini 2.5 Pro
+- Gemini 2.5 Flash (Thinking)
 
 **Anthropic Claude**:
-- Claude 3.5 Sonnet (regular and extended thinking)
-- Claude 3 Opus
-- Native Anthropic API format
+- Claude 4.5 Sonnet
+- Claude 4.5 Sonnet (Thinking)
+- Claude 4.5 Opus (Thinking)
 
 ### Factory Droid Integration
 
@@ -135,7 +138,7 @@ DroidGravity automatically converts Factory Droid's proprietary request format:
 
 ```json
 {
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash",
   "input": [
     {
       "role": "user",
@@ -151,7 +154,7 @@ Into standard OpenAI format:
 
 ```json
 {
-  "model": "gemini-2.0-flash-exp",
+  "model": "gemini-3-flash",
   "messages": [
     {
       "role": "user",

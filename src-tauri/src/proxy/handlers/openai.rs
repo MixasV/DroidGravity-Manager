@@ -300,8 +300,6 @@ pub async fn handle_completions(
             .get("instructions")
             .and_then(|v| v.as_str())
             .unwrap_or_default();
-        let input_items = body.get("input").and_then(|v| v.as_array());
-
         let mut messages = Vec::new();
 
         // System Instructions
@@ -309,11 +307,19 @@ pub async fn handle_completions(
             messages.push(json!({ "role": "system", "content": instructions }));
         }
 
-        let mut call_id_to_name = std::collections::HashMap::new();
+        // Check if input is a string (Factory Droid title generation)
+        if let Some(input_str) = body.get("input").and_then(|v| v.as_str()) {
+            messages.push(json!({
+                "role": "user",
+                "content": input_str
+            }));
+            debug!("[Factory Droid] Converted string input to user message");
+        } else if let Some(input_items) = body.get("input").and_then(|v| v.as_array()) {
+            // Input is an array - process normally
+            let mut call_id_to_name = std::collections::HashMap::new();
 
-        // Pass 1: Build Call ID to Name Map
-        if let Some(items) = input_items {
-            for item in items {
+            // Pass 1: Build Call ID to Name Map
+            for item in input_items {
                 let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 match item_type {
                     "function_call" | "local_shell_call" | "web_search_call" => {
@@ -339,11 +345,9 @@ pub async fn handle_completions(
                     _ => {}
                 }
             }
-        }
 
-        // Pass 2: Map Input Items to Messages
-        if let Some(items) = input_items {
-            for item in items {
+            // Pass 2: Map Input Items to Messages
+            for item in input_items {
                 let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 
                 // Factory Droid special case: no "type" field, but has "role" directly

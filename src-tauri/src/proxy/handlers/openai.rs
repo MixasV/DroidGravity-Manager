@@ -813,94 +813,13 @@ pub async fn handle_responses(
             obj.remove("input");
             obj.remove("instructions");
             obj.insert("messages".to_string(), json!(messages));
-            // Force disable streaming for Factory Droid
-            // Factory Droid expects regular JSON response, not SSE stream
-            obj.insert("stream".to_string(), json!(false));
         }
     }
 
-    // Delegate to handle_chat_completions to get Gemini response
-    let chat_result = handle_chat_completions(State(state), Json(body)).await?;
-    let response = chat_result.into_response();
-    
-    // Convert Chat Completion response to Text Completion format for Factory Droid
-    // Factory Droid expects { "choices": [{ "text": "...", "finish_reason": "stop" }] }
-    // Not { "choices": [{ "message": { "content": "..." } }] }
-    
-    // Extract response body
-    let (parts, body) = response.into_parts();
-    let response_bytes = match axum::body::to_bytes(body, usize::MAX).await {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to read response: {}", e),
-            ));
-        }
-    };
-    
-    // Convert Chat Completion response to OpenAI Responses API format for Factory Droid
-    // Factory Droid expects: { "id": "...", "object": "response", "output": [{ "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "..." }] }] }
-    // Not: { "choices": [{ "message": { "content": "..." } }] }
-    
-    let chat_json: Value = match serde_json::from_slice(&response_bytes) {
-        Ok(v) => v,
-        Err(e) => {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to parse chat response: {}", e),
-            ));
-        }
-    };
-    
-    // Extract content from chat completion format
-    let content_text = chat_json
-        .get("choices")
-        .and_then(|v| v.get(0))
-        .and_then(|choice| choice.get("message"))
-        .and_then(|msg| msg.get("content"))
-        .and_then(|c| c.as_str())
-        .unwrap_or("")
-        .to_string();
-    
-    let response_id = chat_json
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("resp_unknown")
-        .to_string();
-    
-    let model = chat_json
-        .get("model")
-        .and_then(|v| v.as_str())
-        .unwrap_or("gemini")
-        .to_string();
-    
-    // Build OpenAI Responses API format
-    let responses_api_response = json!({
-        "id": response_id,
-        "object": "response",
-        "created_at": chrono::Utc::now().timestamp(),
-        "status": "completed",
-        "model": model,
-        "output": [
-            {
-                "type": "message",
-                "id": format!("msg_{}", uuid::Uuid::new_v4()),
-                "status": "completed",
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "output_text",
-                        "text": content_text
-                    }
-                ]
-            }
-        ],
-        "usage": chat_json.get("usage").cloned().unwrap_or(json!({}))
-    });
-    
-    debug!("[Factory Droid] Converted to OpenAI Responses API format");
-    Ok(Json(responses_api_response).into_response())
+    // Factory Droid sends requests to /v1/responses
+    // Just pass through to handle_chat_completions which returns OpenAI format
+    debug!("[Factory Droid] Proxying to handle_chat_completions");
+    handle_chat_completions(State(state), Json(body)).await
 }
 
 pub async fn handle_images_generations(

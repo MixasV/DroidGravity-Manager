@@ -124,7 +124,7 @@ impl AxumServer {
                 "/v1/completions",
                 post(handlers::openai::handle_completions),
             )
-            .route("/v1/responses", post(handlers::openai::handle_completions)) // 兼容 Codex CLI
+            .route("/v1/responses", post(handlers::openai::handle_responses)) // Factory Droid (Gemini compatible)
             .route(
                 "/v1/images/generations",
                 post(handlers::openai::handle_images_generations),

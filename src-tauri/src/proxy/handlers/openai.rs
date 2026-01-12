@@ -747,6 +747,79 @@ pub async fn handle_list_models(State(state): State<AppState>) -> impl IntoRespo
 
 /// OpenAI Images API: POST /v1/images/generations
 /// 处理图像生成请求，转换为 Gemini API 格式
+/// Handle Factory Droid /v1/responses endpoint
+/// Converts Factory Droid format (input array) to OpenAI format (messages)
+/// and delegates to handle_chat_completions for Gemini models
+pub async fn handle_responses(
+    State(state): State<AppState>,
+    Json(mut body): Json<Value>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    info!("Received /v1/responses payload for Factory Droid");
+
+    // Check if this is Factory Droid format with "input" field
+    if let Some(input_value) = body.get("input") {
+        let mut messages = Vec::new();
+
+        // Add system instructions if present
+        if let Some(instructions) = body.get("instructions").and_then(|v| v.as_str()) {
+            if !instructions.is_empty() {
+                messages.push(json!({
+                    "role": "system",
+                    "content": instructions
+                }));
+            }
+        }
+
+        // Process input field
+        if let Some(input_str) = input_value.as_str() {
+            // String input (title generation)
+            messages.push(json!({
+                "role": "user",
+                "content": input_str
+            }));
+            debug!("[Factory Droid] Converted string input to user message");
+        } else if let Some(input_items) = input_value.as_array() {
+            // Array input (normal chat)
+            for item in input_items {
+                let role = item.get("role").and_then(|v| v.as_str()).unwrap_or("user");
+                
+                // Extract content
+                if let Some(content_parts) = item.get("content").and_then(|v| v.as_array()) {
+                    let mut text_parts = Vec::new();
+                    
+                    for part in content_parts {
+                        if part.get("type").and_then(|v| v.as_str()) == Some("input_text") {
+                            if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
+                                text_parts.push(text.to_string());
+                            }
+                        } else if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
+                            text_parts.push(text.to_string());
+                        }
+                    }
+                    
+                    if !text_parts.is_empty() {
+                        messages.push(json!({
+                            "role": role,
+                            "content": text_parts.join("\n\n")
+                        }));
+                    }
+                }
+            }
+            debug!("[Factory Droid] Converted array input to {} messages", messages.len());
+        }
+
+        // Convert to OpenAI format
+        if let Some(obj) = body.as_object_mut() {
+            obj.remove("input");
+            obj.remove("instructions");
+            obj.insert("messages".to_string(), json!(messages));
+        }
+    }
+
+    // Delegate to handle_chat_completions
+    handle_chat_completions(State(state), Json(body)).await
+}
+
 pub async fn handle_images_generations(
     State(state): State<AppState>,
     Json(body): Json<Value>,

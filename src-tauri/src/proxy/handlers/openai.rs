@@ -852,14 +852,19 @@ pub async fn handle_responses(
     // Convert message.content to text field
     if let Some(choices) = chat_json.get_mut("choices").and_then(|v| v.as_array_mut()) {
         for choice in choices {
-            if let Some(message) = choice.get("message") {
-                if let Some(content) = message.get("content").and_then(|v| v.as_str()) {
-                    // Remove message field and add text field
-                    if let Some(choice_obj) = choice.as_object_mut() {
-                        choice_obj.remove("message");
-                        choice_obj.insert("text".to_string(), json!(content));
-                        choice_obj.insert("logprobs".to_string(), json!(null));
-                    }
+            // First, extract content (immutable borrow)
+            let content_str = choice
+                .get("message")
+                .and_then(|msg| msg.get("content"))
+                .and_then(|c| c.as_str())
+                .map(|s| s.to_string());
+            
+            // Then, mutate choice (mutable borrow)
+            if let Some(content) = content_str {
+                if let Some(choice_obj) = choice.as_object_mut() {
+                    choice_obj.remove("message");
+                    choice_obj.insert("text".to_string(), json!(content));
+                    choice_obj.insert("logprobs".to_string(), json!(null));
                 }
             }
         }

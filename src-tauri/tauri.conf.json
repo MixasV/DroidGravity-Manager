@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Antigravity Tools",
-  "version": "3.3.21",
-  "identifier": "com.lbjlaq.antigravity-tools",
+  "productName": "DroidGravity Manager",
+  "version": "1.0.0",
+  "identifier": "com.mixasv.droidgravity-manager",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "Antigravity Tools",
+        "title": "DroidGravity Manager",
         "width": 1024,
         "height": 700,
         "titleBarStyle": "Overlay",

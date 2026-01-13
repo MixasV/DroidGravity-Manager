@@ -15,10 +15,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: drovity
             asset_name: drovity-linux-x64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: drovity
-            asset_name: drovity-linux-arm64
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: drovity

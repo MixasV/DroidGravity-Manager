@@ -58,25 +58,14 @@ echo -e "${GREEN}Latest version:${NC} $LATEST_RELEASE"
 
 # Construct download URL
 if [ "$OS_TYPE" = "linux" ]; then
-    # Try musl version first (static binary, maximum compatibility)
-    BINARY_FILE="drovity-linux-$ARCH_TYPE-musl"
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/$BINARY_FILE"
-    
-    # Check if musl version exists
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$DOWNLOAD_URL")
-    
-    if [ "$HTTP_CODE" != "200" ]; then
-        # Fallback to GNU version
-        echo -e "${YELLOW}musl version not found, using GNU version...${NC}"
-        BINARY_FILE="drovity-linux-$ARCH_TYPE"
-        DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/$BINARY_FILE"
-    else
-        echo -e "${GREEN}Using static musl build for maximum compatibility${NC}"
-    fi
+    # Use static musl build (works on all distros)
+    BINARY_FILE="drovity-linux-$ARCH_TYPE"
+    echo -e "${GREEN}Using static musl build (works on all Linux distributions)${NC}"
 elif [ "$OS_TYPE" = "macos" ]; then
     BINARY_FILE="drovity-macos-$ARCH_TYPE"
-    DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/$BINARY_FILE"
 fi
+
+DOWNLOAD_URL="https://github.com/$REPO/releases/download/$LATEST_RELEASE/$BINARY_FILE"
 
 echo "Downloading $BINARY_FILE..."
 TMP_FILE="/tmp/$BINARY_FILE"

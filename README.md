@@ -34,7 +34,7 @@ irm https://raw.githubusercontent.com/MixasV/drovity/main/install.ps1 | iex
 #### Manual installation
 
 1. Download binary for your system from [Releases](https://github.com/MixasV/drovity/releases):
-   - **Linux x64**: `drovity-linux-x64-musl` (static build, recommended for older systems) or `drovity-linux-x64` (requires GLIBC 2.31+)
+   - **Linux x64**: `drovity-linux-x64` (static musl build, works on all distros)
    - **macOS Intel**: `drovity-macos-x64`
    - **macOS Apple Silicon**: `drovity-macos-arm64`
    - **Windows**: `drovity-windows.exe`
@@ -163,20 +163,12 @@ Drovity stores data in `~/.drovity/`:
 
 If you get an error like `GLIBC_2.38' not found`:
 
-**Solution 1 (Recommended)**: Use the static musl build:
-```bash
-# Download musl version
-curl -L -o drovity https://github.com/MixasV/drovity/releases/latest/download/drovity-linux-x64-musl
-chmod +x drovity
-sudo mv drovity /usr/local/bin/
-```
-
-**Solution 2**: The install script will automatically try the musl version first:
+**Solution**: Use the latest release (v0.1.1+):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MixasV/drovity/main/install.sh | bash
 ```
 
-The musl build is statically linked and works on any Linux distribution regardless of GLIBC version.
+All Linux builds from v0.1.1+ are statically linked (musl) and work on any Linux distribution regardless of GLIBC version.
 
 ### Proxy won't start
 ```bash

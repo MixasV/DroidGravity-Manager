@@ -8,18 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.1] - 2026-01-14
 
 ### Added
-- **Static musl builds for Linux** (`drovity-linux-x64-musl`) for maximum compatibility
-  - Fixes `GLIBC_2.38 not found` errors on older Linux distributions
-  - Statically linked binary works on any Linux distro
-- Automatic fallback in install script: tries musl version first, then GNU version
+- **Static musl build for Linux** - all Linux binaries are now statically linked
+  - Fixes `GLIBC_2.38 not found` errors on older distributions
+  - Works on any Linux distro (Ubuntu, Debian, CentOS, Alpine, etc.)
+  - No dependencies on system libraries
 
 ### Changed
-- Linux GNU builds now use Ubuntu 20.04 (GLIBC 2.31+) instead of latest Ubuntu
-- Install script now intelligently selects the best binary for your system
-- Updated README with GLIBC troubleshooting section
+- All Linux builds now use musl for static linking (no GLIBC dependency)
+- Simplified installation script - always downloads musl build for Linux
+- Updated documentation to reflect static builds
 
 ### Fixed
-- **Critical**: Compatibility with older Linux servers (Ubuntu 18.04, 20.04, Debian 10, CentOS 7, etc.)
+- **Critical**: Compatibility with all Linux distributions
 - GLIBC version mismatch errors on production servers
 
 ## [0.1.0] - 2026-01-13

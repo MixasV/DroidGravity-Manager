@@ -11,16 +11,12 @@ jobs:
     strategy:
       matrix:
         include:
-          # Linux musl (static binary for maximum compatibility)
+          # Linux (static musl build - works on all distros)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             artifact_name: drovity
-            asset_name: drovity-linux-x64-musl
-          # Linux GNU (for older distros with GLIBC 2.31+)
-          - os: ubuntu-20.04
-            target: x86_64-unknown-linux-gnu
-            artifact_name: drovity
             asset_name: drovity-linux-x64
+          # macOS
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: drovity
@@ -29,6 +25,7 @@ jobs:
             target: aarch64-apple-darwin
             artifact_name: drovity
             asset_name: drovity-macos-arm64
+          # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: drovity.exe

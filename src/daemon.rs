@@ -1,6 +1,9 @@
 use anyhow::{Result, Context};
 use std::path::PathBuf;
 
+#[cfg(windows)]
+use std::process::{Command, Stdio};
+
 pub async fn start_foreground() -> Result<()> {
     println!("Starting proxy server in foreground...");
     

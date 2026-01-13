@@ -57,6 +57,7 @@ once_cell = "1.19"
 regex = "1.12"
 eventsource-stream = "0.2"
 
-# Daemon support
+# Daemon support (Unix only)
+[target.'cfg(unix)'.dependencies]
 daemonize = "0.5"
 nix = { version = "0.29", features = ["signal", "fs"] }

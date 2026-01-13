@@ -45,3 +45,8 @@ __pycache__/
 # Reference projects (for development only)
 
 DOCKER_DEPLOYMENT.md
+
+
+# Added by cargo
+
+/target

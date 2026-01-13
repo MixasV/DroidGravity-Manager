@@ -21,78 +21,78 @@
             "model": "gemini-3-flash",
             "id": "gemini-3-flash-0",
             "index": 0,
-            "baseUrl": "http://127.0.0.1:8045/v1",
+            "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
             "displayName": "Gemini 3 Flash",
             "maxOutputTokens": 24576,
             "noImageSupport": false,
-            "provider": "openai"
+            "provider": "anthropic"
         },
         {
             "model": "gemini-3-pro-high",
             "id": "gemini-3-pro-high-1",
             "index": 1,
-            "baseUrl": "http://127.0.0.1:8045/v1",
+            "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
             "displayName": "Gemini 3 Pro High",
             "maxOutputTokens": 32768,
             "noImageSupport": false,
-            "provider": "openai"
+            "provider": "anthropic"
         },
         {
             "model": "gemini-3-pro-low",
             "id": "gemini-3-pro-low-2",
             "index": 2,
-            "baseUrl": "http://127.0.0.1:8045/v1",
+            "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
             "displayName": "Gemini 3 Pro Low",
             "maxOutputTokens": 32768,
             "noImageSupport": false,
-            "provider": "openai"
+            "provider": "anthropic"
         },
         {
             "model": "gemini-2.5-flash",
             "id": "gemini-2-5-flash-3",
             "index": 3,
-            "baseUrl": "http://127.0.0.1:8045/v1",
+            "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
             "displayName": "Gemini 2.5 Flash",
             "maxOutputTokens": 24576,
             "noImageSupport": false,
-            "provider": "openai"
+            "provider": "anthropic"
         },
         {
             "model": "gemini-2.5-flash-lite",
             "id": "gemini-2-5-flash-lite-4",
             "index": 4,
-            "baseUrl": "http://127.0.0.1:8045/v1",
+            "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
             "displayName": "Gemini 2.5 Flash Lite",
             "maxOutputTokens": 24576,
             "noImageSupport": false,
-            "provider": "openai"
+            "provider": "anthropic"
         },
         {
             "model": "gemini-2.5-pro",
             "id": "gemini-2-5-pro-5",
             "index": 5,
-            "baseUrl": "http://127.0.0.1:8045/v1",
+            "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
             "displayName": "Gemini 2.5 Pro",
             "maxOutputTokens": 32768,
             "noImageSupport": false,
-            "provider": "openai"
+            "provider": "anthropic"
         },
         {
             "model": "gemini-2.5-flash-thinking",
             "id": "gemini-2-5-flash-thinking-6",
             "index": 6,
-            "baseUrl": "http://127.0.0.1:8045/v1",
+            "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
             "displayName": "Gemini 2.5 Flash (Thinking)",
             "maxOutputTokens": 24576,
             "noImageSupport": false,
-            "provider": "openai"
+            "provider": "anthropic"
         },
         {
             "model": "claude-sonnet-4-5",

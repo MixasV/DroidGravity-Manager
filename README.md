@@ -73,12 +73,12 @@ The compiled application will be in `src-tauri/target/release/`.
       "model": "gemini-3-flash",
       "id": "gemini-3-flash-0",
       "index": 0,
-      "baseUrl": "http://127.0.0.1:8045/v1",
+      "baseUrl": "http://127.0.0.1:8045/",
       "apiKey": "YOUR_DROIDGRAVITY_API_KEY_HERE",
       "displayName": "Gemini 3 Flash",
       "maxOutputTokens": 24576,
       "noImageSupport": false,
-      "provider": "openai"
+      "provider": "anthropic"
     },
     {
       "model": "claude-sonnet-4-5",
@@ -96,8 +96,9 @@ The compiled application will be in `src-tauri/target/release/`.
 ```
 
 **Important Configuration Notes**:
-- **Gemini models**: Use `"provider": "openai"` and `"baseUrl": "http://127.0.0.1:8045/v1"`
-- **Claude models**: Use `"provider": "anthropic"` and `"baseUrl": "http://127.0.0.1:8045"` (no `/v1`)
+- **Both Gemini and Claude models**: Use `"provider": "anthropic"` 
+- **Gemini models**: Use `"baseUrl": "http://127.0.0.1:8045/"` (with trailing slash)
+- **Claude models**: Use `"baseUrl": "http://127.0.0.1:8045"` (no trailing slash)
 
 ### Step 3: Select Models in Factory Droid
 

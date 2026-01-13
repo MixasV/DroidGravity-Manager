@@ -1,6 +1,5 @@
 use anyhow::{Result, Context};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 
 pub async fn start_foreground() -> Result<()> {
     println!("Starting proxy server in foreground...");
@@ -16,6 +15,7 @@ pub async fn start_foreground() -> Result<()> {
     let proxy_config = crate::proxy::config::ProxyConfig {
         port: config.proxy.port,
         api_key: config.proxy.api_key.clone(),
+        allow_lan_access: config.proxy.allow_lan_access,
     };
     crate::proxy::start_server(proxy_config).await?;
     
@@ -69,6 +69,7 @@ pub async fn start_background() -> Result<()> {
                 let proxy_config = crate::proxy::config::ProxyConfig {
                     port: config.proxy.port,
                     api_key: config.proxy.api_key.clone(),
+                    allow_lan_access: config.proxy.allow_lan_access,
                 };
                 crate::proxy::start_server(proxy_config).await?;
             }

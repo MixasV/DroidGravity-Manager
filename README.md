@@ -35,7 +35,6 @@ irm https://raw.githubusercontent.com/MixasV/drovity/main/install.ps1 | iex
 
 1. Download binary for your system from [Releases](https://github.com/MixasV/drovity/releases):
    - Linux x64: `drovity-linux-x64`
-   - Linux ARM64: `drovity-linux-arm64`
    - macOS Intel: `drovity-macos-x64`
    - macOS Apple Silicon: `drovity-macos-arm64`
    - Windows: `drovity-windows.exe`

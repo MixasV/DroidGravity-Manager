@@ -11,7 +11,13 @@ jobs:
     strategy:
       matrix:
         include:
+          # Linux musl (static binary for maximum compatibility)
           - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact_name: drovity
+            asset_name: drovity-linux-x64-musl
+          # Linux GNU (for older distros with GLIBC 2.31+)
+          - os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
             artifact_name: drovity
             asset_name: drovity-linux-x64
@@ -33,6 +39,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Install musl tools for static linking
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

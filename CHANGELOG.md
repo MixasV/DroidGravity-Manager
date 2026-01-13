@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-01-14
+
+### Added
+- **Static musl builds for Linux** (`drovity-linux-x64-musl`) for maximum compatibility
+  - Fixes `GLIBC_2.38 not found` errors on older Linux distributions
+  - Statically linked binary works on any Linux distro
+- Automatic fallback in install script: tries musl version first, then GNU version
+
+### Changed
+- Linux GNU builds now use Ubuntu 20.04 (GLIBC 2.31+) instead of latest Ubuntu
+- Install script now intelligently selects the best binary for your system
+- Updated README with GLIBC troubleshooting section
+
+### Fixed
+- **Critical**: Compatibility with older Linux servers (Ubuntu 18.04, 20.04, Debian 10, CentOS 7, etc.)
+- GLIBC version mismatch errors on production servers
+
 ## [0.1.0] - 2026-01-13
 
 ### Added

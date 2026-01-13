@@ -1,6 +1,6 @@
 [package]
 name = "drovity"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Drovity Contributors"]
 description = "CLI proxy for Google Gemini API with Factory Droid integration"

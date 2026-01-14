@@ -159,6 +159,18 @@ async fn handle_chat_completions(
         }
     };
     
+    // Get project_id for this account
+    let project_id = match super::project_resolver::fetch_project_id(&token).await {
+        Ok(pid) => {
+            tracing::info!("   Project ID: {}", pid);
+            pid
+        },
+        Err(e) => {
+            tracing::warn!("   Failed to get project_id, using mock: {}", e);
+            super::project_resolver::generate_mock_project_id()
+        }
+    };
+    
     // Forward to Gemini API
     let model = payload["model"].as_str().unwrap_or("gemini-2.5-flash");
     let gemini_model = map_model_to_gemini(model);
@@ -167,7 +179,7 @@ async fn handle_chat_completions(
     tracing::info!("   Requested model: {}", model);
     tracing::info!("   Gemini model: {}", gemini_model);
     
-    match forward_to_gemini(&token, &gemini_model, &payload).await {
+    match forward_to_gemini(&token, &gemini_model, &project_id, &payload).await {
         Ok(response) => {
             tracing::info!("✅ Response received from Gemini");
             response
@@ -260,14 +272,15 @@ fn map_model_to_gemini(model: &str) -> String {
     }
 }
 
-async fn forward_to_gemini(token: &str, model: &str, payload: &Value) -> Result<Response> {
-    let client = reqwest::Client::new();
+async fn forward_to_gemini(token: &str, model: &str, project_id: &str, payload: &Value) -> Result<Response> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()?;
     
-    // Convert OpenAI format to Gemini format
-    let gemini_payload = convert_to_gemini_format(payload)?;
+    // Convert OpenAI format to Gemini envelope format
+    let gemini_payload = convert_to_gemini_format(payload, model, project_id)?;
     
     let url = "https://cloudcode-pa.googleapis.com/v1internal:generateContent";
-    
     
     tracing::info!("   POST {}", url);
     tracing::info!("   Payload size: {} bytes", serde_json::to_string(&gemini_payload)?.len());
@@ -275,6 +288,8 @@ async fn forward_to_gemini(token: &str, model: &str, payload: &Value) -> Result<
     let response = client
         .post(url)
         .header("Authorization", format!("Bearer {}", token))
+        .header("Host", "cloudcode-pa.googleapis.com")
+        .header("User-Agent", "antigravity/1.11.9 windows/amd64")
         .header("Content-Type", "application/json")
         .json(&gemini_payload)
         .send()
@@ -292,8 +307,12 @@ async fn forward_to_gemini(token: &str, model: &str, payload: &Value) -> Result<
     let gemini_response: Value = response.json().await?;
     tracing::info!("   Response size: {} bytes", serde_json::to_string(&gemini_response)?.len());
     
+    // Extract from envelope: response.candidates[0].content.parts[0].text
+    // OR direct: candidates[0].content.parts[0].text
+    let response_data = gemini_response.get("response").unwrap_or(&gemini_response);
+    
     // Log first part of content
-    if let Some(text) = gemini_response["candidates"][0]["content"]["parts"][0]["text"].as_str() {
+    if let Some(text) = response_data["candidates"][0]["content"]["parts"][0]["text"].as_str() {
         let preview = if text.len() > 200 {
             format!("{}...", &text[..200])
         } else {
@@ -303,16 +322,18 @@ async fn forward_to_gemini(token: &str, model: &str, payload: &Value) -> Result<
     }
     
     // Convert Gemini response back to OpenAI format
-    let openai_response = convert_gemini_to_openai_response(&gemini_response, model)?;
+    let openai_response = convert_gemini_to_openai_response(response_data, model)?;
     
     Ok(Json(openai_response).into_response())
 }
 
-fn convert_to_gemini_format(payload: &Value) -> Result<Value> {
+fn convert_to_gemini_format(payload: &Value, model: &str, project_id: &str) -> Result<Value> {
     let messages = payload["messages"].as_array()
         .ok_or_else(|| anyhow::anyhow!("Missing messages field"))?;
     
-    let contents: Vec<Value> = messages.iter().map(|msg| {
+    let contents: Vec<Value> = messages.iter().filter(|msg| {
+        msg["role"].as_str().unwrap_or("user") != "system"
+    }).map(|msg| {
         let role = match msg["role"].as_str().unwrap_or("user") {
             "assistant" => "model",
             role => role,
@@ -326,12 +347,43 @@ fn convert_to_gemini_format(payload: &Value) -> Result<Value> {
         })
     }).collect();
     
-    Ok(json!({
+    // Extract system message for systemInstruction
+    let system_text: Vec<String> = messages.iter()
+        .filter(|msg| msg["role"].as_str() == Some("system"))
+        .filter_map(|msg| msg["content"].as_str().map(|s| s.to_string()))
+        .collect();
+    
+    let inner_request = json!({
         "contents": contents,
         "generationConfig": {
             "maxOutputTokens": payload.get("max_tokens").unwrap_or(&json!(8192)),
             "temperature": payload.get("temperature").unwrap_or(&json!(1.0)),
-        }
+        },
+        "systemInstruction": if !system_text.is_empty() {
+            json!({
+                "role": "user",
+                "parts": system_text.iter().map(|s| json!({"text": s})).collect::<Vec<_>>()
+            })
+        } else {
+            json!(null)
+        },
+        "safetySettings": [
+            { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "OFF" },
+            { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "OFF" },
+            { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "OFF" },
+            { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "OFF" },
+            { "category": "HARM_CATEGORY_CIVIC_INTEGRITY", "threshold": "OFF" }
+        ]
+    });
+    
+    // Wrap in v1internal envelope format (like DroidGravity-Manager)
+    Ok(json!({
+        "project": project_id,
+        "requestId": format!("drovity-{}", uuid::Uuid::new_v4()),
+        "request": inner_request,
+        "model": model,
+        "userAgent": "antigravity",
+        "requestType": "text"
     }))
 }
 

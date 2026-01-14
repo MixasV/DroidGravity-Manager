@@ -21,25 +21,15 @@ pub async fn auto_configure(settings_path: &PathBuf) -> Result<()> {
     // Merge with existing customModels
     if let Some(existing_models) = settings.get_mut("customModels") {
         if let Some(existing_array) = existing_models.as_array_mut() {
-            // Merge: add our models, rename conflicts
+            // Remove old drovity models (cleanup)
+            existing_array.retain(|m| {
+                !m["id"].as_str().unwrap_or("").starts_with("custom:Gemini-") &&
+                !m["id"].as_str().unwrap_or("").starts_with("custom:Claude-")
+            });
+            
+            // Add new models
             for model in models.as_array().unwrap() {
-                let model_id = model["id"].as_str().unwrap();
-                
-                // Check if model with same id exists
-                let exists = existing_array.iter().any(|m| {
-                    m["id"].as_str() == Some(model_id)
-                });
-                
-                if exists {
-                    // Rename our model
-                    let mut model_copy = model.clone();
-                    let original_name = model_copy["displayName"].as_str().unwrap();
-                    model_copy["displayName"] = serde_json::json!(format!("{} [drovity]", original_name));
-                    model_copy["id"] = serde_json::json!(format!("{}-drovity", model_id));
-                    existing_array.push(model_copy);
-                } else {
-                    existing_array.push(model.clone());
-                }
+                existing_array.push(model.clone());
             }
         }
     } else {
@@ -71,56 +61,111 @@ fn generate_models_array(api_key: &str, base_url: &str) -> Result<serde_json::Va
     Ok(serde_json::json!([
         {
             "model": "gemini-3-flash",
-            "id": "gemini-3-flash-drovity",
-            "index": 100,
+            "id": "custom:Gemini-3-Flash-0",
+            "index": 0,
             "baseUrl": format!("{}/", base_url),
             "apiKey": api_key,
-            "displayName": "Gemini 3 Flash [drovity]",
+            "displayName": "Gemini 3 Flash",
             "maxOutputTokens": 24576,
             "noImageSupport": false,
             "provider": "anthropic"
         },
         {
             "model": "gemini-3-pro-high",
-            "id": "gemini-3-pro-high-drovity",
-            "index": 101,
+            "id": "custom:Gemini-3-Pro-High-1",
+            "index": 1,
             "baseUrl": format!("{}/", base_url),
             "apiKey": api_key,
-            "displayName": "Gemini 3 Pro High [drovity]",
+            "displayName": "Gemini 3 Pro High",
+            "maxOutputTokens": 32768,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "gemini-3-pro-low",
+            "id": "custom:Gemini-3-Pro-Low-2",
+            "index": 2,
+            "baseUrl": format!("{}/", base_url),
+            "apiKey": api_key,
+            "displayName": "Gemini 3 Pro Low",
             "maxOutputTokens": 32768,
             "noImageSupport": false,
             "provider": "anthropic"
         },
         {
             "model": "gemini-2.5-flash",
-            "id": "gemini-2-5-flash-drovity",
-            "index": 102,
+            "id": "custom:Gemini-2.5-Flash-3",
+            "index": 3,
             "baseUrl": format!("{}/", base_url),
             "apiKey": api_key,
-            "displayName": "Gemini 2.5 Flash [drovity]",
+            "displayName": "Gemini 2.5 Flash",
+            "maxOutputTokens": 24576,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "gemini-2.5-flash-lite",
+            "id": "custom:Gemini-2.5-Flash-Lite-4",
+            "index": 4,
+            "baseUrl": format!("{}/", base_url),
+            "apiKey": api_key,
+            "displayName": "Gemini 2.5 Flash Lite",
             "maxOutputTokens": 24576,
             "noImageSupport": false,
             "provider": "anthropic"
         },
         {
             "model": "gemini-2.5-pro",
-            "id": "gemini-2-5-pro-drovity",
-            "index": 103,
+            "id": "custom:Gemini-2.5-Pro-5",
+            "index": 5,
             "baseUrl": format!("{}/", base_url),
             "apiKey": api_key,
-            "displayName": "Gemini 2.5 Pro [drovity]",
+            "displayName": "Gemini 2.5 Pro",
             "maxOutputTokens": 32768,
             "noImageSupport": false,
             "provider": "anthropic"
         },
         {
+            "model": "gemini-2.5-flash-thinking",
+            "id": "custom:Gemini-2.5-Flash-(Thinking)-6",
+            "index": 6,
+            "baseUrl": format!("{}/", base_url),
+            "apiKey": api_key,
+            "displayName": "Gemini 2.5 Flash (Thinking)",
+            "maxOutputTokens": 24576,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
             "model": "claude-sonnet-4-5",
-            "id": "claude-sonnet-4-5-drovity",
-            "index": 104,
+            "id": "custom:Claude-4.5-Sonnet-7",
+            "index": 7,
             "baseUrl": base_url,
             "apiKey": api_key,
-            "displayName": "Claude 4.5 Sonnet [drovity]",
+            "displayName": "Claude 4.5 Sonnet",
             "maxOutputTokens": 8192,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "claude-sonnet-4-5-thinking",
+            "id": "custom:Claude-4.5-Sonnet-(Thinking)-8",
+            "index": 8,
+            "baseUrl": base_url,
+            "apiKey": api_key,
+            "displayName": "Claude 4.5 Sonnet (Thinking)",
+            "maxOutputTokens": 16384,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "claude-opus-4-5-thinking",
+            "id": "custom:Claude-4.5-Opus-(Thinking)-9",
+            "index": 9,
+            "baseUrl": base_url,
+            "apiKey": api_key,
+            "displayName": "Claude 4.5 Opus (Thinking)",
+            "maxOutputTokens": 16384,
             "noImageSupport": false,
             "provider": "anthropic"
         }

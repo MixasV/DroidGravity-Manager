@@ -93,13 +93,34 @@ async fn handle_list_models() -> Response {
 
 async fn handle_chat_completions(
     State(state): State<AppState>,
-    _headers: HeaderMap,
+    headers: HeaderMap,
     Json(mut payload): Json<Value>,
 ) -> Response {
+    // Log incoming request
+    tracing::info!("📥 Incoming chat completions request");
+    tracing::info!("   Headers: {:?}", headers.get("authorization").map(|h| h.to_str().unwrap_or("invalid")));
+    tracing::info!("   Model: {}", payload["model"].as_str().unwrap_or("not specified"));
+    
     // Factory Droid format conversion: input -> messages
     if let Some(input) = payload.get("input").cloned() {
+        tracing::info!("   Converting Factory Droid 'input' to 'messages'");
         payload["messages"] = convert_input_to_messages(input);
         payload.as_object_mut().unwrap().remove("input");
+    }
+    
+    // Log messages
+    if let Some(messages) = payload["messages"].as_array() {
+        tracing::info!("   Messages count: {}", messages.len());
+        for (i, msg) in messages.iter().enumerate() {
+            let role = msg["role"].as_str().unwrap_or("unknown");
+            let content = msg["content"].as_str().unwrap_or("");
+            let preview = if content.len() > 100 {
+                format!("{}...", &content[..100])
+            } else {
+                content.to_string()
+            };
+            tracing::info!("   Message {}: [{}] {}", i, role, preview);
+        }
     }
     
     // Get current account
@@ -110,8 +131,12 @@ async fn handle_chat_completions(
     };
     
     let account = match account {
-        Some(acc) => acc,
+        Some(acc) => {
+            tracing::info!("   Using account: {}", acc.email);
+            acc
+        },
         None => {
+            tracing::error!("❌ No accounts available");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"error": "No accounts available"}))
@@ -121,9 +146,12 @@ async fn handle_chat_completions(
     
     // Check if token needs refresh
     let token = match refresh_token_if_needed(&account).await {
-        Ok(t) => t,
+        Ok(t) => {
+            tracing::info!("✅ Token valid/refreshed");
+            t
+        },
         Err(e) => {
-            tracing::error!("Failed to refresh token: {}", e);
+            tracing::error!("❌ Failed to refresh token: {}", e);
             return (
                 StatusCode::UNAUTHORIZED,
                 Json(json!({"error": format!("Authentication failed: {}", e)}))
@@ -135,10 +163,17 @@ async fn handle_chat_completions(
     let model = payload["model"].as_str().unwrap_or("gemini-2.5-flash");
     let gemini_model = map_model_to_gemini(model);
     
+    tracing::info!("🔄 Forwarding to Gemini API");
+    tracing::info!("   Requested model: {}", model);
+    tracing::info!("   Gemini model: {}", gemini_model);
+    
     match forward_to_gemini(&token, &gemini_model, &payload).await {
-        Ok(response) => response,
+        Ok(response) => {
+            tracing::info!("✅ Response received from Gemini");
+            response
+        },
         Err(e) => {
-            tracing::error!("Gemini API error: {}", e);
+            tracing::error!("❌ Gemini API error: {}", e);
             (
                 StatusCode::BAD_GATEWAY,
                 Json(json!({"error": format!("Upstream API error: {}", e)}))
@@ -213,9 +248,14 @@ fn map_model_to_gemini(model: &str) -> String {
     match model {
         "gemini-3-flash" => "gemini-exp-1206".to_string(),
         "gemini-3-pro-high" => "gemini-exp-1206".to_string(),
+        "gemini-3-pro-low" => "gemini-exp-1206".to_string(),
         "gemini-2.5-flash" => "gemini-2.0-flash-exp".to_string(),
+        "gemini-2.5-flash-lite" => "gemini-2.0-flash-exp".to_string(),
         "gemini-2.5-pro" => "gemini-2.0-flash-thinking-exp-01-21".to_string(),
-        "claude-sonnet-4-5" => "gemini-2.0-flash-exp".to_string(), // Fallback
+        "gemini-2.5-flash-thinking" => "gemini-2.0-flash-thinking-exp-01-21".to_string(),
+        "claude-sonnet-4-5" => "gemini-2.0-flash-exp".to_string(),
+        "claude-sonnet-4-5-thinking" => "gemini-2.0-flash-thinking-exp-01-21".to_string(),
+        "claude-opus-4-5-thinking" => "gemini-2.0-flash-thinking-exp-01-21".to_string(),
         _ => "gemini-2.0-flash-exp".to_string(),
     }
 }
@@ -231,6 +271,9 @@ async fn forward_to_gemini(token: &str, model: &str, payload: &Value) -> Result<
         model
     );
     
+    tracing::info!("   POST {}", url);
+    tracing::info!("   Payload size: {} bytes", serde_json::to_string(&gemini_payload)?.len());
+    
     let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", token))
@@ -239,12 +282,27 @@ async fn forward_to_gemini(token: &str, model: &str, payload: &Value) -> Result<
         .send()
         .await?;
     
-    if !response.status().is_success() {
+    let status = response.status();
+    tracing::info!("   Response status: {}", status);
+    
+    if !status.is_success() {
         let error_text = response.text().await?;
+        tracing::error!("❌ Gemini API error response: {}", error_text);
         anyhow::bail!("Gemini API error: {}", error_text);
     }
     
     let gemini_response: Value = response.json().await?;
+    tracing::info!("   Response size: {} bytes", serde_json::to_string(&gemini_response)?.len());
+    
+    // Log first part of content
+    if let Some(text) = gemini_response["candidates"][0]["content"]["parts"][0]["text"].as_str() {
+        let preview = if text.len() > 200 {
+            format!("{}...", &text[..200])
+        } else {
+            text.to_string()
+        };
+        tracing::info!("   Content preview: {}", preview);
+    }
     
     // Convert Gemini response back to OpenAI format
     let openai_response = convert_gemini_to_openai_response(&gemini_response, model)?;

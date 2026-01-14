@@ -8,20 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.2] - 2026-01-14
 
 ### Fixed
-- **Critical**: Google OAuth authorization now works! Switched from deprecated OOB flow to Device Authorization Flow
-  - Fixes `Error 400: invalid_request` when authorizing Google accounts
-  - Works perfectly on headless servers (no GUI needed)
-  - User opens URL on ANY device (phone/computer), enters code, server auto-completes
-
-### Changed
-- OAuth flow now uses Device Authorization (RFC 8628) instead of OOB
-- Better user experience: clear instructions, no manual code copy-paste
-- Authorization works from any device with a browser
+- **Critical**: Google OAuth authorization works with localhost redirect + manual code extraction
+  - Works with existing Antigravity credentials (no Device Flow setup needed)
+  - User copies authorization code from redirect URL
+  - Compatible with headless servers
+- **Critical**: Factory Droid model IDs now in correct format (`custom:Model-Name-Index`)
+  - Fixes model display issues in Factory Droid CLI
+  - All models now properly recognized
 
 ### Added
+- **Detailed request logging** for debugging:
+  - Incoming requests (model, messages, headers)
+  - Token refresh status
+  - Gemini API requests and responses
+  - Content previews for debugging
+- **New models**:
+  - Gemini 3 Pro Low
+  - Gemini 2.5 Flash Lite
+  - Gemini 2.5 Flash (Thinking)
+  - Claude 4.5 Sonnet (Thinking)
+  - Claude 4.5 Opus (Thinking)
 - **Smart Factory Droid configuration**: Auto-creates `settings.json` if `.factory` folder exists
-  - No need to run `droid` first - drovity creates the config automatically
-  - Perfect for fresh installations on servers
+  - No need to run `droid` first on fresh installations
+  - Perfect for automated server deployments
 
 ## [0.1.1] - 2026-01-14
 

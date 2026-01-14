@@ -357,8 +357,9 @@ async fn handle_anthropic_messages(
             }
         };
         
-        // Forward to Gemini
-        match forward_to_gemini_stream(&token, &gemini_model, &project_id, &gemini_payload).await {
+        
+        // Forward to Gemini (DIRECT - payload already in Gemini format!)
+        match send_gemini_payload_direct(&token, &gemini_payload).await {
             Ok(gemini_axum_response) => {
                 // Extract JSON from Axum Response
                 let (_parts, body) = gemini_axum_response.into_parts();
@@ -552,6 +553,46 @@ fn map_model_to_gemini(model: &str) -> String {
         // Default fallback
         _ => "claude-sonnet-4-5".to_string(),
     }
+}
+
+// NEW: Direct Gemini payload sender (no conversion needed)
+// Used when payload is already in Gemini format (from transform_claude_request_in)
+async fn send_gemini_payload_direct(token: &str, gemini_payload: &Value) -> Result<Response> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()?;
+    
+    let url = "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse";
+    
+    tracing::debug!("   POST {} (STREAM - direct)", url);
+    tracing::debug!("   📤 Gemini payload: {}", serde_json::to_string_pretty(gemini_payload)?);
+    
+    let response = client
+        .post(url)
+        .header("Authorization", format!("Bearer {}", token))
+        .header("User-Agent", "antigravity/1.11.9 windows/amd64")
+        .header("Content-Type", "application/json")
+        .json(gemini_payload)
+        .send()
+        .await?;
+    
+    let status = response.status();
+    tracing::info!("   Response status: {}", status);
+    
+    if !status.is_success() {
+        let error_text = response.text().await?;
+        tracing::error!("❌ Gemini API error response: {}", error_text);
+        anyhow::bail!("Gemini API error {}: {}", status, error_text);
+    }
+    
+    // Collect SSE stream into single response
+    let stream_body = response.text().await?;
+    tracing::debug!("   Stream received: {} bytes", stream_body.len());
+    
+    // Parse SSE and collect final response
+    let gemini_response = parse_sse_stream(&stream_body)?;
+    
+    Ok((StatusCode::OK, Json(gemini_response)).into_response())
 }
 
 // Use STREAM for better quota (like DroidGravity-Manager)

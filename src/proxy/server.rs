@@ -359,70 +359,15 @@ async fn handle_anthropic_messages(
         
         
         // Forward to Gemini (DIRECT - payload already in Gemini format!)
-        match send_gemini_payload_direct(&token, &gemini_payload).await {
-            Ok(gemini_axum_response) => {
-                // Extract JSON from Axum Response
-                let (_parts, body) = gemini_axum_response.into_parts();
-                let bytes = match axum::body::to_bytes(body, usize::MAX).await {
-                    Ok(b) => b,
-                    Err(e) => {
-                        last_error = format!("Body read error: {}", e);
-                        tracing::error!("❌ {}", last_error);
-                        continue;
-                    }
-                };
-                
-                let gemini_json: Value = match serde_json::from_slice(&bytes) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        last_error = format!("JSON parse error: {}", e);
-                        tracing::error!("❌ {}", last_error);
-                        continue;
-                    }
-                };
-                
-                // Parse Gemini response into typed structure
-                let gemini_response: super::claude::models::GeminiResponse = match serde_json::from_value(gemini_json) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        last_error = format!("Failed to parse Gemini response: {}", e);
-                        tracing::error!("❌ {}", last_error);
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(json!({"error": last_error}))
-                        ).into_response();
-                    }
-                };
-                
-                // Convert using FULL DroidGravity-Manager logic
-                match super::claude::transform_response(&gemini_response) {
-                    Ok(claude_response) => {
-                        tracing::info!("✅ Gemini→Claude conversion OK");
-                        let response_json = match serde_json::to_value(&claude_response) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                tracing::error!("Failed to serialize Claude response: {}", e);
-                                return (
-                                    StatusCode::INTERNAL_SERVER_ERROR,
-                                    Json(json!({"error": "Response serialization error"}))
-                                ).into_response();
-                            }
-                        };
-                        
-                        return (
-                            StatusCode::OK,
-                            Json(response_json)
-                        ).into_response();
-                    },
-                    Err(e) => {
-                        last_error = e;
-                        tracing::error!("❌ Gemini→Claude error: {}", last_error);
-                        return (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(json!({"error": last_error}))
-                        ).into_response();
-                    }
-                }
+        let stream_requested = claude_payload.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
+        let trace_id = format!("req_{}", uuid::Uuid::new_v4());
+        
+        match send_gemini_payload_direct(&token, &gemini_payload, stream_requested, trace_id, account.email.clone()).await {
+            Ok(response) => {
+                // Stream processing is done inside send_gemini_payload_direct
+                // Just return the response as-is (either SSE stream or collected JSON)
+                tracing::info!("✅ Response ready");
+                return response;
             },
             Err(e) => {
                 last_error = e.to_string();
@@ -555,16 +500,22 @@ fn map_model_to_gemini(model: &str) -> String {
     }
 }
 
-// NEW: Direct Gemini payload sender (no conversion needed)
-// Used when payload is already in Gemini format (from transform_claude_request_in)
-async fn send_gemini_payload_direct(token: &str, gemini_payload: &Value) -> Result<Response> {
+// [COPY FROM ORIGINAL] Direct Gemini API caller with stream processing
+// Matches DroidGravity-Manager's logic: bytes_stream -> create_claude_sse_stream -> collect_stream_to_json
+async fn send_gemini_payload_direct(
+    token: &str, 
+    gemini_payload: &Value,
+    stream_requested: bool,
+    trace_id: String,
+    email: String,
+) -> Result<Response> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
         .build()?;
     
     let url = "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse";
     
-    tracing::debug!("   POST {} (STREAM - direct)", url);
+    tracing::debug!("   POST {} (stream={})", url, stream_requested);
     tracing::debug!("   📤 Gemini payload: {}", serde_json::to_string_pretty(gemini_payload)?);
     
     let response = client
@@ -581,18 +532,45 @@ async fn send_gemini_payload_direct(token: &str, gemini_payload: &Value) -> Resu
     
     if !status.is_success() {
         let error_text = response.text().await?;
-        tracing::error!("❌ Gemini API error response: {}", error_text);
+        tracing::error!("❌ Gemini API error: {}", error_text);
         anyhow::bail!("Gemini API error {}: {}", status, error_text);
     }
     
-    // Collect SSE stream into single response
-    let stream_body = response.text().await?;
-    tracing::debug!("   Stream received: {} bytes", stream_body.len());
+    // ORIGINAL LOGIC: bytes_stream -> create_claude_sse_stream
+    use futures::StreamExt;
+    use axum::body::Body;
     
-    // Parse SSE and collect final response
-    let gemini_response = parse_sse_stream(&stream_body)?;
+    let stream = response.bytes_stream();
+    let gemini_stream = Box::pin(stream);
+    let claude_stream = super::claude::create_claude_sse_stream(gemini_stream, trace_id.clone(), email.clone());
     
-    Ok((StatusCode::OK, Json(gemini_response)).into_response())
+    // Client wants JSON (non-stream) - collect the stream
+    if !stream_requested {
+        use super::claude::collect_stream_to_json;
+        
+        match collect_stream_to_json(Box::pin(claude_stream)).await {
+            Ok(full_response) => {
+                tracing::info!("✅ Stream collected to JSON");
+                Ok((
+                    StatusCode::OK,
+                    Json(full_response)
+                ).into_response())
+            },
+            Err(e) => {
+                anyhow::bail!("Stream collection error: {}", e)
+            }
+        }
+    } else {
+        // Client wants stream - return SSE
+        Ok(axum::response::Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "text/event-stream")
+            .header("Cache-Control", "no-cache")
+            .header("Connection", "keep-alive")
+            .header("X-Account-Email", &email)
+            .body(Body::from_stream(claude_stream))
+            .unwrap())
+    }
 }
 
 // Use STREAM for better quota (like DroidGravity-Manager)

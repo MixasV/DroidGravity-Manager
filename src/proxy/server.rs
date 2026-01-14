@@ -356,7 +356,7 @@ async fn handle_anthropic_messages(
         match forward_to_gemini_stream(&token, &gemini_model, &project_id, &gemini_payload).await {
             Ok(gemini_axum_response) => {
                 // Extract JSON from Axum Response
-                let (parts, body) = gemini_axum_response.into_parts();
+                let (_parts, body) = gemini_axum_response.into_parts();
                 let bytes = match axum::body::to_bytes(body, usize::MAX).await {
                     Ok(b) => b,
                     Err(e) => {

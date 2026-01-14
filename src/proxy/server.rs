@@ -375,18 +375,42 @@ async fn handle_anthropic_messages(
                     }
                 };
                 
-                // CRITICAL: Convert Gemini → Claude using direct converter
-                match super::claude_converter::gemini_to_claude_response(&gemini_json, &gemini_model) {
+                // Parse Gemini response into typed structure
+                let gemini_response: super::claude::models::GeminiResponse = match serde_json::from_value(gemini_json) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        last_error = format!("Failed to parse Gemini response: {}", e);
+                        tracing::error!("❌ {}", last_error);
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({"error": last_error}))
+                        ).into_response();
+                    }
+                };
+                
+                // Convert using FULL DroidGravity-Manager logic
+                match super::claude::transform_response(&gemini_response) {
                     Ok(claude_response) => {
                         tracing::info!("✅ Gemini→Claude conversion OK");
+                        let response_json = match serde_json::to_value(&claude_response) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                tracing::error!("Failed to serialize Claude response: {}", e);
+                                return (
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(json!({"error": "Response serialization error"}))
+                                ).into_response();
+                            }
+                        };
+                        
                         return (
                             StatusCode::OK,
-                            Json(claude_response)
+                            Json(response_json)
                         ).into_response();
                     },
                     Err(e) => {
-                        last_error = format!("Gemini→Claude conversion error: {}", e);
-                        tracing::error!("❌ {}", last_error);
+                        last_error = e;
+                        tracing::error!("❌ Gemini→Claude error: {}", last_error);
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             Json(json!({"error": last_error}))

@@ -471,7 +471,12 @@ async fn forward_to_gemini_stream(token: &str, model: &str, project_id: &str, pa
     let url = "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse";
     
     tracing::info!("   POST {} (STREAM)", url);
-    tracing::info!("   Payload size: {} bytes", serde_json::to_string(&gemini_payload)?.len());
+    let payload_string = serde_json::to_string(&gemini_payload)?;
+    tracing::info!("   Payload size: {} bytes", payload_string.len());
+    
+    // DEBUG: Log full payload for troubleshooting
+    tracing::debug!("   Full payload: {}", serde_json::to_string_pretty(&gemini_payload)?);
+    
     
     let response = client
         .post(url)

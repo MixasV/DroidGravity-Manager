@@ -17,11 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All models now properly recognized
 
 ### Added
-- **Detailed request logging** for debugging:
-  - Incoming requests (model, messages, headers)
+- **Optional detailed logging** with `--log` flag:
+  - Logs to `~/.drovity/proxy.log`
+  - All proxy requests and responses
   - Token refresh status
   - Gemini API requests and responses
   - Content previews for debugging
+  - Only enabled when explicitly requested
+  - Usage: `drovity start --log` or `drovity hide --log`
 - **New models**:
   - Gemini 3 Pro Low
   - Gemini 2.5 Flash Lite

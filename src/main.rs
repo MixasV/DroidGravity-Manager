@@ -12,6 +12,10 @@ use anyhow::Result;
 #[command(name = "drovity")]
 #[command(about = "Google Gemini API proxy for Factory Droid", long_about = None)]
 struct Cli {
+    /// Enable detailed logging to ~/.drovity/proxy.log
+    #[arg(long)]
+    log: bool,
+    
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -32,15 +36,12 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
-        )
-        .init();
-
     let cli = Cli::parse();
+    
+    // Setup logging only if --log flag is provided
+    if cli.log {
+        setup_logging()?;
+    }
 
     match cli.command {
         Some(Commands::Menu) | None => {
@@ -65,5 +66,36 @@ async fn main() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn setup_logging() -> Result<()> {
+    use std::fs::OpenOptions;
+    use tracing_subscriber::fmt::writer::MakeWriterExt;
+    
+    // Get log file path
+    let config_dir = dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
+        .join(".drovity");
+    
+    std::fs::create_dir_all(&config_dir)?;
+    let log_file = config_dir.join("proxy.log");
+    
+    // Open log file in append mode
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_file)?;
+    
+    // Setup tracing subscriber with file output
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
+        )
+        .with_writer(file.with_max_level(tracing::Level::INFO))
+        .with_ansi(false)
+        .init();
+    
     Ok(())
 }

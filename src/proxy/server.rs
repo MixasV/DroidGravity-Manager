@@ -12,6 +12,8 @@ use tokio::sync::RwLock;
 
 use super::config::ProxyConfig;
 
+const MAX_RETRY_ATTEMPTS: usize = 10;
+
 #[derive(Clone)]
 struct AppState {
     accounts: Arc<RwLock<Vec<crate::config::account::Account>>>,
@@ -123,75 +125,135 @@ async fn handle_chat_completions(
         }
     }
     
-    // Get current account
-    let account = {
-        let accounts = state.accounts.read().await;
-        let index = *state.current_account_index.read().await;
-        accounts.get(index).cloned()
-    };
+    // Get all accounts for retry loop
+    let accounts = state.accounts.read().await.clone();
+    let pool_size = accounts.len();
+    let max_attempts = MAX_RETRY_ATTEMPTS.min(pool_size).max(1);
     
-    let account = match account {
-        Some(acc) => {
-            tracing::info!("   Using account: {}", acc.email);
-            acc
-        },
-        None => {
-            tracing::error!("❌ No accounts available");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "No accounts available"}))
-            ).into_response();
-        }
-    };
+    let mut last_error = String::new();
+    let mut last_email: Option<String> = None;
     
-    // Check if token needs refresh
-    let token = match refresh_token_if_needed(&account).await {
-        Ok(t) => {
-            tracing::info!("✅ Token valid/refreshed");
-            t
-        },
-        Err(e) => {
-            tracing::error!("❌ Failed to refresh token: {}", e);
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"error": format!("Authentication failed: {}", e)}))
-            ).into_response();
-        }
-    };
-    
-    // Get project_id for this account
-    let project_id = match super::project_resolver::fetch_project_id(&token).await {
-        Ok(pid) => {
-            tracing::info!("   Project ID: {}", pid);
-            pid
-        },
-        Err(e) => {
-            tracing::warn!("   Failed to get project_id, using mock: {}", e);
-            super::project_resolver::generate_mock_project_id()
-        }
-    };
-    
-    // Forward to Gemini API
-    let model = payload["model"].as_str().unwrap_or("gemini-2.5-flash");
-    let gemini_model = map_model_to_gemini(model);
-    
-    tracing::info!("🔄 Forwarding to Gemini API");
-    tracing::info!("   Requested model: {}", model);
-    tracing::info!("   Gemini model: {}", gemini_model);
-    
-    match forward_to_gemini(&token, &gemini_model, &project_id, &payload).await {
-        Ok(response) => {
-            tracing::info!("✅ Response received from Gemini");
-            response
-        },
-        Err(e) => {
-            tracing::error!("❌ Gemini API error: {}", e);
-            (
-                StatusCode::BAD_GATEWAY,
-                Json(json!({"error": format!("Upstream API error: {}", e)}))
-            ).into_response()
+    // Retry loop with account rotation
+    for attempt in 0..max_attempts {
+        let force_rotate = attempt > 0;
+        
+        // Select account (rotate on retry)
+        let account = {
+            let mut index_guard = state.current_account_index.write().await;
+            if force_rotate {
+                *index_guard = (*index_guard + 1) % pool_size;
+                tracing::info!("🔄 Force rotation: switched to account index {}", *index_guard);
+            }
+            accounts.get(*index_guard).cloned()
+        };
+        
+        let account = match account {
+            Some(acc) => {
+                tracing::info!("   Using account: {} (attempt {}/{})", acc.email, attempt + 1, max_attempts);
+                acc
+            },
+            None => {
+                tracing::error!("❌ No accounts available");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "No accounts available"}))
+                ).into_response();
+            }
+        };
+        
+        // Check if token needs refresh
+        let token = match refresh_token_if_needed(&account).await {
+            Ok(t) => {
+                tracing::info!("✅ Token valid/refreshed");
+                t
+            },
+            Err(e) => {
+                tracing::error!("❌ Failed to refresh token: {}", e);
+                last_error = format!("Token refresh failed: {}", e);
+                last_email = Some(account.email.clone());
+                continue; // Try next account
+            }
+        };
+        
+        // Get project_id for this account
+        let project_id = match super::project_resolver::fetch_project_id(&token).await {
+            Ok(pid) => {
+                tracing::info!("   Project ID: {}", pid);
+                pid
+            },
+            Err(e) => {
+                tracing::warn!("   Failed to get project_id, using mock: {}", e);
+                super::project_resolver::generate_mock_project_id()
+            }
+        };
+        
+        // Forward to Gemini API
+        let model = payload["model"].as_str().unwrap_or("gemini-2.5-flash");
+        let gemini_model = map_model_to_gemini(model);
+        
+        tracing::info!("🔄 Forwarding to Gemini API");
+        tracing::info!("   Requested model: {}", model);
+        tracing::info!("   Gemini model: {}", gemini_model);
+        
+        match forward_to_gemini_stream(&token, &gemini_model, &project_id, &payload).await {
+            Ok(response) => {
+                tracing::info!("✅ Response received from Gemini");
+                return response;
+            },
+            Err(e) => {
+                last_error = e.to_string();
+                last_email = Some(account.email.clone());
+                
+                tracing::error!("❌ Gemini API error (attempt {}/{}): {}", attempt + 1, max_attempts, e);
+                
+                // Parse error to decide retry strategy
+                let error_msg = e.to_string();
+                
+                // Check for retryable errors
+                if error_msg.contains("429") || error_msg.contains("503") || error_msg.contains("500") || error_msg.contains("RESOURCE_EXHAUSTED") {
+                    tracing::warn!("   Retryable error detected, rotating to next account");
+                    continue; // Retry with next account
+                }
+                
+                // Check for quota exhausted (stop retrying)
+                if error_msg.contains("QUOTA_EXHAUSTED") {
+                    tracing::error!("   Quota exhausted - stopping retry");
+                    return (
+                        StatusCode::TOO_MANY_REQUESTS,
+                        Json(json!({"error": format!("Quota exhausted: {}", error_msg)}))
+                    ).into_response();
+                }
+                
+                // Check for auth errors
+                if error_msg.contains("401") || error_msg.contains("403") {
+                    tracing::warn!("   Auth error, trying next account");
+                    continue;
+                }
+                
+                // Non-retryable error
+                if error_msg.contains("404") || error_msg.contains("400") {
+                    tracing::error!("   Non-retryable error, returning immediately");
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": error_msg}))
+                    ).into_response();
+                }
+                
+                // Generic error - retry
+                continue;
+            }
         }
     }
+    
+    // All attempts failed
+    tracing::error!("❌ All {} attempts failed. Last error: {}", max_attempts, last_error);
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({
+            "error": format!("All attempts failed. Last error: {}", last_error),
+            "last_account": last_email.unwrap_or_else(|| "unknown".to_string())
+        }))
+    ).into_response()
 }
 
 async fn handle_anthropic_messages(
@@ -272,17 +334,19 @@ fn map_model_to_gemini(model: &str) -> String {
     }
 }
 
-async fn forward_to_gemini(token: &str, model: &str, project_id: &str, payload: &Value) -> Result<Response> {
+// Use STREAM for better quota (like DroidGravity-Manager)
+async fn forward_to_gemini_stream(token: &str, model: &str, project_id: &str, payload: &Value) -> Result<Response> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
         .build()?;
     
-    // Convert OpenAI format to Gemini envelope format
+    // Convert OpenAI format to Gemini envelope format  
     let gemini_payload = convert_to_gemini_format(payload, model, project_id)?;
     
-    let url = "https://cloudcode-pa.googleapis.com/v1internal:generateContent";
+    // Use streamGenerateContent for better quota
+    let url = "https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse";
     
-    tracing::info!("   POST {}", url);
+    tracing::info!("   POST {} (STREAM)", url);
     tracing::info!("   Payload size: {} bytes", serde_json::to_string(&gemini_payload)?.len());
     
     let response = client
@@ -301,14 +365,17 @@ async fn forward_to_gemini(token: &str, model: &str, project_id: &str, payload: 
     if !status.is_success() {
         let error_text = response.text().await?;
         tracing::error!("❌ Gemini API error response: {}", error_text);
-        anyhow::bail!("Gemini API error: {}", error_text);
+        anyhow::bail!("Gemini API error {}: {}", status, error_text);
     }
     
-    let gemini_response: Value = response.json().await?;
-    tracing::info!("   Response size: {} bytes", serde_json::to_string(&gemini_response)?.len());
+    // Collect SSE stream into single response
+    let stream_body = response.text().await?;
+    tracing::info!("   Stream received: {} bytes", stream_body.len());
     
-    // Extract from envelope: response.candidates[0].content.parts[0].text
-    // OR direct: candidates[0].content.parts[0].text
+    // Parse SSE and collect final response
+    let gemini_response = parse_sse_stream(&stream_body)?;
+    
+    // Extract from envelope
     let response_data = gemini_response.get("response").unwrap_or(&gemini_response);
     
     // Log first part of content
@@ -325,6 +392,40 @@ async fn forward_to_gemini(token: &str, model: &str, project_id: &str, payload: 
     let openai_response = convert_gemini_to_openai_response(response_data, model)?;
     
     Ok(Json(openai_response).into_response())
+}
+
+fn parse_sse_stream(stream_body: &str) -> Result<Value> {
+    let mut accumulated_text = String::new();
+    
+    // Parse SSE events
+    for line in stream_body.lines() {
+        if line.starts_with("data: ") {
+            let data = &line[6..]; // Remove "data: " prefix
+            if data.trim() == "[DONE]" {
+                continue;
+            }
+            
+            if let Ok(event) = serde_json::from_str::<Value>(data) {
+                // Extract text from streaming chunks
+                if let Some(text) = event["response"]["candidates"][0]["content"]["parts"][0]["text"].as_str() {
+                    accumulated_text.push_str(text);
+                } else if let Some(text) = event["candidates"][0]["content"]["parts"][0]["text"].as_str() {
+                    accumulated_text.push_str(text);
+                }
+            }
+        }
+    }
+    
+    // Build final response structure
+    Ok(json!({
+        "candidates": [{
+            "content": {
+                "parts": [{
+                    "text": accumulated_text
+                }]
+            }
+        }]
+    }))
 }
 
 fn convert_to_gemini_format(payload: &Value, model: &str, project_id: &str) -> Result<Value> {

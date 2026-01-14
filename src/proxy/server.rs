@@ -258,110 +258,166 @@ async fn handle_chat_completions(
 
 async fn handle_anthropic_messages(
     State(state): State<AppState>,
-    Json(payload): Json<Value>,
+    Json(claude_payload): Json<Value>,
 ) -> Response {
-    tracing::info!("📥 Incoming Claude/Anthropic messages request");
-    tracing::info!("   Model: {}", payload["model"].as_str().unwrap_or("not specified"));
+    tracing::info!("📥 [CLAUDE/Anthropic] Incoming request");
+    let model = claude_payload["model"].as_str().unwrap_or("claude-sonnet-4-5");
+    tracing::info!("   Requested model: {}", model);
     
-    // Convert Anthropic/Claude format to OpenAI format
-    // Claude format: {"role": "user", "content": [{"type": "text", "text": "..."}]}
-    // OpenAI format: {"role": "user", "content": "..."}
+    let gemini_model = map_model_to_gemini(model);
+    tracing::info!("   Mapped to Gemini model: {}", gemini_model);
     
-    let mut converted_messages: Vec<Value> = Vec::new();
+    // Account selection and retry logic
+    let accounts = state.accounts.read().await;
+    let pool_size = accounts.len();
+    let max_attempts = MAX_RETRY_ATTEMPTS.min(pool_size).max(1);
     
-    // Handle system prompt (Claude has separate "system" field)
-    if let Some(system) = payload.get("system") {
-        let system_text = match system {
-            Value::String(s) => s.clone(),
-            Value::Array(arr) => {
-                // Array of system blocks
-                arr.iter()
-                    .filter_map(|block| {
-                        if block["type"] == "text" {
-                            block["text"].as_str().map(|s| s.to_string())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            },
-            _ => String::new(),
+    let mut last_error = String::new();
+    let mut last_email = None;
+    
+    for attempt in 0..max_attempts {
+        let force_rotate = attempt > 0;
+        
+        // Select account
+        let account = {
+            let mut index_guard = state.current_account_index.write().await;
+            if force_rotate {
+                *index_guard = (*index_guard + 1) % pool_size;
+                tracing::info!("🔄 Rotated to account index {}", *index_guard);
+            }
+            accounts.get(*index_guard).cloned()
         };
         
-        if !system_text.is_empty() {
-            converted_messages.push(json!({
-                "role": "system",
-                "content": system_text
-            }));
-        }
-    }
-    
-    // Convert messages
-    if let Some(messages) = payload["messages"].as_array() {
-        for msg in messages {
-            let role = msg["role"].as_str().unwrap_or("user");
-            
-            // Convert Claude content format to simple string
-            let content = match &msg["content"] {
-                Value::String(s) => s.clone(),
-                Value::Array(arr) => {
-                    // Claude uses array of content blocks
-                    arr.iter()
-                        .filter_map(|block| {
-                            match block["type"].as_str() {
-                                Some("text") => block["text"].as_str().map(|s| s.to_string()),
-                                Some("tool_result") => {
-                                    // Extract text from tool result
-                                    if let Some(content) = block["content"].as_str() {
-                                        Some(content.to_string())
-                                    } else if let Some(arr) = block["content"].as_array() {
-                                        Some(arr.iter()
-                                            .filter_map(|b| b["text"].as_str())
-                                            .collect::<Vec<_>>()
-                                            .join("\n"))
-                                    } else {
-                                        Some("[tool result]".to_string())
-                                    }
-                                },
-                                Some("tool_use") => {
-                                    // Include tool call info as text
-                                    let name = block["name"].as_str().unwrap_or("unknown");
-                                    Some(format!("[Tool: {}]", name))
-                                },
-                                Some("thinking") => {
-                                    // Include thinking as text
-                                    block["thinking"].as_str().map(|s| format!("[Thinking: {}]", s))
-                                },
-                                _ => None,
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                },
-                _ => String::new(),
-            };
-            
-            if !content.is_empty() {
-                converted_messages.push(json!({
-                    "role": role,
-                    "content": content
-                }));
+        let account = match account {
+            Some(acc) => acc,
+            None => {
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({"error": "No accounts available"}))
+                ).into_response();
+            }
+        };
+        
+        tracing::info!("   Account: {} (attempt {}/{})", account.email, attempt + 1, max_attempts);
+        last_email = Some(account.email.clone());
+        
+        // Get token
+        let token = match refresh_token_if_needed(&account).await {
+            Ok(t) => {
+                tracing::info!("✅ Token OK");
+                t
+            },
+            Err(e) => {
+                last_error = e.to_string();
+                tracing::error!("❌ Token error: {}", e);
+                continue;
+            }
+        };
+        
+        // Get project ID
+        let project_id = match super::project_resolver::fetch_project_id(&token).await {
+            Ok(pid) => {
+                tracing::info!("   Project: {}", pid);
+                pid
+            },
+            Err(e) => {
+                tracing::warn!("   Project fetch failed, using mock: {}", e);
+                super::project_resolver::generate_mock_project_id()
+            }
+        };
+        
+        // CRITICAL: Convert Claude → Gemini using direct converter
+        let gemini_payload = match super::claude_converter::claude_to_gemini_request(
+            &claude_payload,
+            &gemini_model,
+            &project_id
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": format!("Claude→Gemini conversion error: {}", e)}))
+                ).into_response();
+            }
+        };
+        
+        // Forward to Gemini
+        match forward_to_gemini_stream(&token, &gemini_model, &project_id, &gemini_payload).await {
+            Ok(gemini_axum_response) => {
+                // Extract JSON from Axum Response
+                let (parts, body) = gemini_axum_response.into_parts();
+                let bytes = match axum::body::to_bytes(body, usize::MAX).await {
+                    Ok(b) => b,
+                    Err(e) => {
+                        last_error = format!("Body read error: {}", e);
+                        tracing::error!("❌ {}", last_error);
+                        continue;
+                    }
+                };
+                
+                let gemini_json: Value = match serde_json::from_slice(&bytes) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        last_error = format!("JSON parse error: {}", e);
+                        tracing::error!("❌ {}", last_error);
+                        continue;
+                    }
+                };
+                
+                // CRITICAL: Convert Gemini → Claude using direct converter
+                match super::claude_converter::gemini_to_claude_response(&gemini_json, &gemini_model) {
+                    Ok(claude_response) => {
+                        tracing::info!("✅ Gemini→Claude conversion OK");
+                        return (
+                            StatusCode::OK,
+                            Json(claude_response)
+                        ).into_response();
+                    },
+                    Err(e) => {
+                        last_error = format!("Gemini→Claude conversion error: {}", e);
+                        tracing::error!("❌ {}", last_error);
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({"error": last_error}))
+                        ).into_response();
+                    }
+                }
+            },
+            Err(e) => {
+                last_error = e.to_string();
+                tracing::error!("❌ Gemini API error (attempt {}/{}): {}", attempt + 1, max_attempts, e);
+                
+                let error_msg = e.to_string();
+                
+                // Retryable: 429, 500, 503
+                if error_msg.contains("429") || error_msg.contains("503") || error_msg.contains("500") || error_msg.contains("RESOURCE_EXHAUSTED") {
+                    tracing::warn!("   Retryable error → next account");
+                    continue;
+                }
+                
+                // Non-retryable: 400, 404
+                if error_msg.contains("404") || error_msg.contains("400") {
+                    tracing::error!("   Non-retryable error");
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"error": error_msg}))
+                    ).into_response();
+                }
+                
+                continue;
             }
         }
     }
     
-    tracing::info!("   Converted {} messages", converted_messages.len());
-    
-    let openai_payload = json!({
-        "model": payload["model"].as_str().unwrap_or("claude-sonnet-4-5"),
-        "messages": converted_messages,
-        "max_tokens": payload.get("max_tokens").unwrap_or(&json!(8192)),
-        "temperature": payload.get("temperature").unwrap_or(&json!(1.0)),
-    });
-    
-    // Forward through chat completions handler
-    handle_chat_completions(State(state), HeaderMap::new(), Json(openai_payload)).await
+    // All attempts failed
+    tracing::error!("❌ All {} attempts failed. Last: {}", max_attempts, last_error);
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({
+            "error": format!("All attempts failed. Last: {}", last_error),
+            "last_account": last_email.unwrap_or_else(|| "unknown".to_string())
+        }))
+    ).into_response()
 }
 
 fn convert_input_to_messages(input: Value) -> Value {
@@ -474,8 +530,8 @@ async fn forward_to_gemini_stream(token: &str, model: &str, project_id: &str, pa
     let payload_string = serde_json::to_string(&gemini_payload)?;
     tracing::info!("   Payload size: {} bytes", payload_string.len());
     
-    // DEBUG: Log full payload for troubleshooting
-    tracing::debug!("   Full payload: {}", serde_json::to_string_pretty(&gemini_payload)?);
+    // CRITICAL: Log full payload for troubleshooting
+    tracing::info!("   📤 SENDING PAYLOAD: {}", serde_json::to_string_pretty(&gemini_payload)?);
     
     
     let response = client

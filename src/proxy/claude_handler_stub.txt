@@ -1,0 +1,24 @@
+// TEMPORARY: Full server.rs rewrite needed
+// This is handle_claude_direct that uses direct Claude ↔ Gemini conversion
+
+use crate::proxy::claude_converter::{claude_to_gemini_request, gemini_to_claude_response};
+
+async fn handle_claude_direct(
+    State(state): State<AppState>,
+    Json(claude_payload): Json<Value>,
+) -> Response {
+    tracing::info!("📥 [CLAUDE-DIRECT] Incoming request");
+    tracing::info!("   Model: {}", claude_payload["model"].as_str().unwrap_or("not specified"));
+    
+    let model = claude_payload["model"].as_str().unwrap_or("claude-sonnet-4-5");
+    let gemini_model = map_model_to_gemini(model);
+    
+    tracing::info!("   Mapped to: {}", gemini_model);
+    
+    // TODO: implement full logic with retry
+    // For now return error
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(json!({"error": "Claude direct handler not yet implemented"}))
+    ).into_response()
+}

@@ -1,0 +1,52 @@
+fn convert_to_gemini_format(payload: &Value) -> Result<Value> {
+    let messages = payload["messages"].as_array()
+        .ok_or_else(|| antml:anyhow!("Missing messages field"))?;
+    
+    let contents: Vec<Value> = messages.iter().map(|msg| {
+        let role = match msg["role"].as_str().unwrap_or("user") {
+            "assistant" => "model",
+            role => role,
+        };
+        
+        json!({
+            "role": role,
+            "parts": [{
+                "text": msg["content"].as_str().unwrap_or("")
+            }]
+        })
+    }).collect();
+    
+    let inner_request = json!({
+        "contents": contents,
+        "generationConfig": {
+            "maxOutputTokens": payload.get("max_tokens").unwrap_or(&json!(8192)),
+            "temperature": payload.get("temperature").unwrap_or(&json!(1.0)),
+        }
+    });
+    
+    // Wrap in v1internal envelope format (like DroidGravity-Manager)
+    let model = payload["model"].as_str().unwrap_or("gemini-2.5-flash");
+    let project_id = generate_mock_project_id();
+    
+    Ok(json!({
+        "project": project_id,
+        "requestId": format!("drovity-{}", uuid::Uuid::new_v4()),
+        "request": inner_request,
+        "model":  map_model_to_gemini(model),
+        "userAgent": "antigravity",
+        "requestType": "text"
+    }))
+}
+
+fn generate_mock_project_id() -> String {
+    let chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::thread_rng();
+    use rand::Rng;
+    
+    (0..12)
+        .map(|_| {
+            let idx = rng.gen_range(0..chars.len());
+            chars.chars().nth(idx).unwrap()
+        })
+        .collect()
+}

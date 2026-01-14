@@ -266,10 +266,8 @@ async fn forward_to_gemini(token: &str, model: &str, payload: &Value) -> Result<
     // Convert OpenAI format to Gemini format
     let gemini_payload = convert_to_gemini_format(payload)?;
     
-    let url = format!(
-        "https://cloudcode-pa.googleapis.com/v1internal/models/{}:generateContent",
-        model
-    );
+    let url = "https://cloudcode-pa.googleapis.com/v1internal:generateContent";
+    
     
     tracing::info!("   POST {}", url);
     tracing::info!("   Payload size: {} bytes", serde_json::to_string(&gemini_payload)?.len());

@@ -715,7 +715,11 @@
             "tokens": "Token 消耗 (輸入/輸出)",
             "time": "請求時間",
             "model": "使用模型",
-            "id": "請求 ID"
+            "id": "請求 ID",
+            "protocol": "協定類型",
+            "mapped_model": "路由後模型",
+            "account_used": "使用帳號",
+            "payload_empty": "無封包資料"
         },
         "dialog": {
             "clear_title": "清除監控紀錄",

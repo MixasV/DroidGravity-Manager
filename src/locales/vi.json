@@ -712,7 +712,11 @@
             "tokens": "Tokens (I/O)",
             "time": "Thời điểm",
             "model": "Model",
-            "id": "Request ID"
+            "id": "Request ID",
+            "protocol": "Giao thức",
+            "mapped_model": "Model Đã Ánh xạ",
+            "account_used": "Tài khoản Sử dụng",
+            "payload_empty": "Không có Payload"
         },
         "dialog": {
             "clear_title": "Xóa Logs Proxy",

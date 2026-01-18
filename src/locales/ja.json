@@ -670,7 +670,11 @@
             "tokens": "トークン (I/O)",
             "time": "時間",
             "model": "モデル",
-            "id": "リクエストID"
+            "id": "リクエストID",
+            "protocol": "プロトコル",
+            "mapped_model": "マッピング後のモデル",
+            "account_used": "使用アカウント",
+            "payload_empty": "ペイロードなし"
         },
         "dialog": {
             "clear_title": "プロキシログをクリア",

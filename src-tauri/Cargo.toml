@@ -34,7 +34,7 @@ base64 = "0.22"
 sysinfo = "0.31"
 tokio = { version = "1", features = ["full"] }
 url = "2.5.7"
-tauri-plugin-dialog = "2.5"
+tauri-plugin-dialog = "2.6"
 tauri-plugin-fs = "2.4.4"
 image = "0.25.9"
 thiserror = "2.0.17"

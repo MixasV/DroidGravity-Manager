@@ -126,24 +126,69 @@ pub async fn get_all_dynamic_models(
 }
 
 /// 通配符匹配辅助函数
-/// 支持简单的 * 通配符匹配
+/// 支持多个 * 通配符匹配 (glob-style)
 /// 
 /// # 示例
 /// - `gpt-4*` 匹配 `gpt-4`, `gpt-4-turbo`, `gpt-4-0613` 等
 /// - `claude-3-5-sonnet-*` 匹配所有 3.5 sonnet 版本
 /// - `*-thinking` 匹配所有以 `-thinking` 结尾的模型
+/// - `claude-*-sonnet-*` 匹配 `claude-3-5-sonnet-20241022` 等 (multi-wildcard)
+/// - `*thinking*` 匹配包含 "thinking" 的模型
 fn wildcard_match(pattern: &str, text: &str) -> bool {
-    if let Some(star_pos) = pattern.find('*') {
-        let prefix = &pattern[..star_pos];
-        let suffix = &pattern[star_pos + 1..];
-        text.starts_with(prefix) && text.ends_with(suffix)
-    } else {
-        pattern == text
+    if !pattern.contains('*') {
+        return pattern == text;
     }
+    
+    let segments: Vec<&str> = pattern.split('*').collect();
+    let mut text_pos = 0;
+    let text_chars: Vec<char> = text.chars().collect();
+    let text_len = text_chars.len();
+    
+    for (i, segment) in segments.iter().enumerate() {
+        if segment.is_empty() {
+            continue;
+        }
+        
+        let segment_chars: Vec<char> = segment.chars().collect();
+        let segment_len = segment_chars.len();
+        
+        if i == 0 {
+            if text_len < segment_len {
+                return false;
+            }
+            if text_chars[..segment_len].iter().collect::<String>() != *segment {
+                return false;
+            }
+            text_pos = segment_len;
+        } else if i == segments.len() - 1 {
+            if text_len < text_pos + segment_len {
+                return false;
+            }
+            if text_chars[text_len - segment_len..].iter().collect::<String>() != *segment {
+                return false;
+            }
+        } else {
+            let remaining: String = text_chars[text_pos..].iter().collect();
+            if let Some(pos) = remaining.find(segment) {
+                text_pos += pos + segment_len;
+            } else {
+                return false;
+            }
+        }
+    }
+    
+    true
+}
+
+/// Calculate pattern specificity (higher = more specific)
+fn pattern_specificity(pattern: &str) -> usize {
+    let wildcard_count = pattern.matches('*').count();
+    let char_count = pattern.chars().count();
+    char_count.saturating_sub(wildcard_count)
 }
 
 /// 核心模型路由解析引擎
-/// 优先级：精确匹配 > 通配符匹配 > 系统默认映射
+/// 优先级：精确匹配 > 通配符匹配(按specificity排序) > 系统默认映射
 /// 
 /// # 参数
 /// - `original_model`: 原始模型名称
@@ -161,12 +206,21 @@ pub fn resolve_model_route(
         return target.clone();
     }
     
-    // 2. 通配符匹配
-    for (pattern, target) in custom_mapping.iter() {
-        if pattern.contains('*') && wildcard_match(pattern, original_model) {
-            crate::modules::logger::log_info(&format!("[Router] 通配符映射: {} -> {} (规则: {})", original_model, target, pattern));
-            return target.clone();
-        }
+    // 2. 通配符匹配 - 收集所有匹配的规则并按specificity排序
+    let mut matches: Vec<(&String, &String, usize)> = custom_mapping
+        .iter()
+        .filter(|(pattern, _)| pattern.contains('*') && wildcard_match(pattern, original_model))
+        .map(|(pattern, target)| (pattern, target, pattern_specificity(pattern)))
+        .collect();
+    
+    matches.sort_by(|a, b| b.2.cmp(&a.2));
+    
+    if let Some((pattern, target, specificity)) = matches.first() {
+        crate::modules::logger::log_info(&format!(
+            "[Router] 通配符映射: {} -> {} (规则: {}, specificity: {})", 
+            original_model, target, pattern, specificity
+        ));
+        return (*target).clone();
     }
     
     // 3. 系统默认映射
@@ -191,7 +245,6 @@ mod tests {
             map_claude_model_to_gemini("claude-opus-4"),
             "claude-opus-4-5-thinking"
         );
-        // Test gemini pass-through (should not be caught by "mini" rule)
         assert_eq!(
             map_claude_model_to_gemini("gemini-2.5-flash-mini-test"),
             "gemini-2.5-flash-mini-test"
@@ -200,5 +253,45 @@ mod tests {
             map_claude_model_to_gemini("unknown-model"),
             "claude-sonnet-4-5"
         );
+    }
+
+    #[test]
+    fn test_wildcard_single() {
+        assert!(wildcard_match("gpt-4*", "gpt-4"));
+        assert!(wildcard_match("gpt-4*", "gpt-4-turbo"));
+        assert!(!wildcard_match("gpt-4*", "gpt-3.5-turbo"));
+        assert!(wildcard_match("*-thinking", "claude-opus-4-5-thinking"));
+        assert!(!wildcard_match("*-thinking", "claude-opus-4-5"));
+        assert!(wildcard_match("claude-*-sonnet", "claude-3-5-sonnet"));
+    }
+
+    #[test]
+    fn test_wildcard_multi() {
+        assert!(wildcard_match("claude-*-sonnet-*", "claude-3-5-sonnet-20241022"));
+        assert!(!wildcard_match("claude-*-sonnet-*", "claude-3-5-opus-20241022"));
+        assert!(wildcard_match("*thinking*", "claude-opus-4-5-thinking"));
+        assert!(wildcard_match("*thinking*", "gemini-thinking-pro"));
+        assert!(!wildcard_match("*thinking*", "claude-opus-4-5"));
+    }
+
+    #[test]
+    fn test_pattern_specificity() {
+        assert!(pattern_specificity("claude-opus-4-5-thinking") > pattern_specificity("claude-*"));
+        assert!(pattern_specificity("claude-*-sonnet-*") > pattern_specificity("claude-*"));
+    }
+
+    #[test]
+    fn test_resolve_with_specificity() {
+        use std::collections::HashMap;
+        
+        let mut custom = HashMap::new();
+        custom.insert("claude-*".to_string(), "fallback".to_string());
+        custom.insert("claude-*-sonnet-*".to_string(), "specific-sonnet".to_string());
+        
+        let result = resolve_model_route("claude-3-5-sonnet-20241022", &custom);
+        assert_eq!(result, "specific-sonnet");
+        
+        let result2 = resolve_model_route("claude-opus-4", &custom);
+        assert_eq!(result2, "fallback");
     }
 }

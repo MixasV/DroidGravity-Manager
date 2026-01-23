@@ -212,7 +212,7 @@
             "auto_launch": "开机自动启动",
             "auto_launch_enabled": "启用",
             "auto_launch_disabled": "禁用",
-            "auto_launch_desc": "系统启动时自动运行 Antigravity Tools"
+            "auto_launch_desc": "系统启动时自动运行 DroidGravity Manager"
         },
         "account": {
             "title": "账号设置",

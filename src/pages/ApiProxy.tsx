@@ -277,8 +277,8 @@ export default function ApiProxy() {
             "claude-3-5-sonnet-*": "claude-sonnet-4-5",
             "claude-3-opus-*": "claude-opus-4-5-thinking",
             "claude-opus-4-*": "claude-opus-4-5-thinking",
-            "claude-haiku-*": "gemini-2.5-flash-lite",
-            "claude-3-haiku-*": "gemini-2.5-flash-lite",
+            "claude-haiku-*": "gemini-2.5-flash",
+            "claude-3-haiku-*": "gemini-2.5-flash",
         };
 
         const newConfig = {

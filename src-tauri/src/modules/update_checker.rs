@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const GITHUB_API_URL: &str = "https://api.github.com/repos/lbjlaq/Antigravity-Manager/releases/latest";
+const GITHUB_API_URL: &str = "https://api.github.com/repos/MixasV/DroidGravity-Manager/releases/latest";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_CHECK_INTERVAL_HOURS: u64 = 24;
 
@@ -48,7 +48,7 @@ struct GitHubRelease {
 /// Check for updates from GitHub releases
 pub async fn check_for_updates() -> Result<UpdateInfo, String> {
     let client = reqwest::Client::builder()
-        .user_agent("Antigravity-Manager")
+        .user_agent("DroidGravity-Manager")
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;

@@ -212,7 +212,7 @@
             "auto_launch": "Launch at Startup",
             "auto_launch_enabled": "Enabled",
             "auto_launch_disabled": "Disabled",
-            "auto_launch_desc": "Automatically launch Antigravity Tools when system starts"
+            "auto_launch_desc": "Automatically launch DroidGravity Manager when system starts"
         },
         "account": {
             "title": "Account Settings",

@@ -73,18 +73,12 @@ jobs:
           releaseBody: |
             ## 🚀 DroidGravity Manager ${{ github.ref_name }}
             
-            Factory Droid integration for Antigravity Manager
-            
-            ### 🆕 What's New
-            - Factory Droid request format support
-            - Automatic conversion of `input` → `messages`
-            - Pre-configured model settings for Gemini and Claude
-            - Full compatibility with original Antigravity Manager
+            Account manager and API proxy for Factory Droid with Google Gemini and Anthropic Claude support.
             
             ### 📦 Downloads
-            - **Windows**: `.msi` or `.exe` installer
-            - **macOS**: `.dmg` or `.app` (Intel and Apple Silicon)
-            - **Linux**: `.AppImage` or `.deb`
+            - **Windows**: `.exe` installer (NSIS)
+            - **macOS**: `.dmg` (Universal - Intel and Apple Silicon)
+            - **Linux**: `.AppImage`, `.deb`, `.rpm`
             
             ### 📝 Setup Guide
             See [README](https://github.com/${{ github.repository }}) for installation and configuration instructions.

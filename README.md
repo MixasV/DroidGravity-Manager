@@ -1,14 +1,18 @@
 # DroidGravity Manager 🚀
 
-**Version 1.0.0**
+**Version 1.1.0**
 
 A fork of [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager) with **Factory Droid** support for seamless integration with Google Gemini and Anthropic Claude models.
 
-## 🌟 What's New in v1.0
+## 🌟 What's New in v1.1.0
 
-DroidGravity Manager extends the original Antigravity Manager with automatic request format conversion for **Factory Droid**, enabling you to use Gemini and Claude models through Factory's interface with automatic account rotation and quota management.
+- **Rebranded**: UI updated from "Antigravity Tools" to "DroidGravity Manager"
+- **Update Checker**: Now checks for updates from this repository
+- **Flash Lite Fix**: Replaced `gemini-2.5-flash-lite` with `gemini-2.5-flash` to fix 429 rate limit errors
+- **Multi-Wildcard Routing**: Support for patterns like `claude-*-sonnet-*` in model mapping
+- **Specificity-Based Priority**: More specific wildcard rules now take precedence
 
-### Key Improvements
+### Key Features
 
 - **Factory Droid Support**: Automatic conversion of Factory Droid's request format to OpenAI-compatible format
 - **Gemini Integration**: Full support for Google Gemini models (3 Flash, 3 Pro, 2.5 Flash, 2.5 Pro, Thinking variants)
@@ -186,6 +190,15 @@ Default port is `8045`. To change:
 ---
 
 ## 📝 Changelog
+
+### Version 1.1.0 (2026-01-23)
+
+- 🎨 Rebranded UI from "Antigravity Tools" to "DroidGravity Manager"
+- 🔄 Update checker now points to this repository
+- 🐛 Fixed 429 rate limit errors by replacing `gemini-2.5-flash-lite` with `gemini-2.5-flash`
+- ✨ Added multi-wildcard pattern support in model routing (e.g., `claude-*-sonnet-*`)
+- ✨ Added specificity-based priority for wildcard rules
+- 🧪 Added unit tests for wildcard matching
 
 ### Version 1.0.0 (2026-01-12)
 

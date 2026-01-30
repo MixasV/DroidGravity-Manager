@@ -209,7 +209,7 @@ impl StreamingState {
                 server_tool_use: None,
             });
 
-        let mut message = json!({
+        let message = json!({
             "id": raw_json.get("responseId")
                 .and_then(|v| v.as_str())
                 .unwrap_or_else(|| "msg_unknown"),

@@ -98,14 +98,27 @@ fn process_sse_line(line: &str, state: &mut StreamingState, trace_id: &str, emai
     // 解包 response 字段 (如果存在)
     let raw_json = json_value.get("response").unwrap_or(&json_value);
 
-    // 发送 message_start
+    // 101. 发送 message_start
     if !state.message_start_sent {
+        // [NEW] Catch Gemini errors encoded in SSE data before sending message_start
+        if let Some(error) = raw_json.get("error") {
+            tracing::error!("[{}] [Claude-SSE] Upstream returned error in stream: {:?}", trace_id, error);
+            chunks.push(state.emit("error", serde_json::json!({
+                "type": "error",
+                "error": {
+                    "type": "overloaded_error",
+                    "message": format!("Upstream error: {}", error.get("message").and_then(|v| v.as_str()).unwrap_or("Unknown Gemini error"))
+                }
+            })));
+            return Some(chunks);
+        }
+
         chunks.push(state.emit_message_start(raw_json));
     }
 
-    // 捕获 groundingMetadata (Web Search)
+    // Capture groundingMetadata (Web Search) - Handle both camelCase and snake_case
     if let Some(candidate) = raw_json.get("candidates").and_then(|c| c.get(0)) {
-        if let Some(grounding) = candidate.get("groundingMetadata") {
+        if let Some(grounding) = candidate.get("groundingMetadata").or_else(|| candidate.get("grounding_metadata")) {
             // 提取搜索词
             if let Some(query) = grounding.get("webSearchQueries")
                 .and_then(|v| v.as_array())
@@ -161,11 +174,12 @@ fn process_sse_line(line: &str, state: &mut StreamingState, trace_id: &str, emai
     if let Some(finish_reason) = raw_json
         .get("candidates")
         .and_then(|c| c.get(0))
-        .and_then(|cand| cand.get("finishReason"))
+        .and_then(|cand| cand.get("finishReason").or_else(|| cand.get("finish_reason")))
         .and_then(|f| f.as_str())
     {
         let usage = raw_json
             .get("usageMetadata")
+            .or_else(|| raw_json.get("usage_metadata"))
             .and_then(|u| serde_json::from_value::<UsageMetadata>(u.clone()).ok());
 
         if let Some(ref u) = usage {
@@ -198,9 +212,17 @@ fn process_sse_line(line: &str, state: &mut StreamingState, trace_id: &str, emai
 
 /// 发送强制结束事件
 pub fn emit_force_stop(state: &mut StreamingState) -> Vec<Bytes> {
+    let mut chunks = Vec::new();
+
+    // [FIX] Ensure message_start is sent before finishing, even on empty streams
+    if !state.message_start_sent {
+        tracing::warn!("[Claude-SSE] Stream ended without any data. Emitting empty message_start.");
+        chunks.push(state.emit_message_start(&serde_json::json!({})));
+    }
+
     if !state.message_stop_sent {
-        let mut chunks = state.emit_finish(None, None);
-        if chunks.is_empty() {
+        chunks.extend(state.emit_finish(None, None));
+        if !state.message_stop_sent {
             chunks.push(Bytes::from(
                 "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
             ));
@@ -208,7 +230,7 @@ pub fn emit_force_stop(state: &mut StreamingState) -> Vec<Bytes> {
         }
         return chunks;
     }
-    vec![]
+    chunks
 }
 
 /// Process grounding metadata from Gemini's googleSearch and emit as Claude web_search blocks

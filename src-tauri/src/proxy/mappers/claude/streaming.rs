@@ -195,10 +195,19 @@ impl StreamingState {
             return Bytes::new();
         }
 
-        let usage = raw_json
-            .get("usageMetadata")
+        let usage_data = raw_json.get("usageMetadata")
+            .or_else(|| raw_json.get("usage_metadata"));
+
+        let usage = usage_data
             .and_then(|u| serde_json::from_value::<UsageMetadata>(u.clone()).ok())
-            .map(|u| to_claude_usage(&u));
+            .map(|u| to_claude_usage(&u))
+            .unwrap_or(Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_read_input_tokens: None,
+                cache_creation_input_tokens: None,
+                server_tool_use: None,
+            });
 
         let mut message = json!({
             "id": raw_json.get("responseId")
@@ -212,15 +221,14 @@ impl StreamingState {
                 .unwrap_or(""),
             "stop_reason": null,
             "stop_sequence": null,
+            "usage": usage,
         });
 
-        // Capture model name for signature cache
-        if let Some(m) = raw_json.get("modelVersion").and_then(|v| v.as_str()) {
-            self.model_name = Some(m.to_string());
-        }
-
-        if let Some(u) = usage {
-            message["usage"] = json!(u);
+        // Restore model_name capture for signature cache
+        if let Some(m) = message.get("model").and_then(|v| v.as_str()) {
+            if !m.is_empty() {
+                self.model_name = Some(m.to_string());
+            }
         }
 
         let result = self.emit(

@@ -1205,7 +1205,7 @@ fn create_warmup_response(request: &ClaudeRequest, is_stream: bool) -> Response 
             // content_block_stop
             "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n".to_string(),
             // message_delta
-            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":1}}\n\n".to_string(),
+            "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n\n".to_string(),
             // message_stop
             "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n".to_string(),
         ];

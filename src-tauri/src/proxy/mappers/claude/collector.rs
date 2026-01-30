@@ -39,29 +39,36 @@ where
     let mut current_event_type = String::new();
     let mut current_data = String::new();
 
+    let mut buffer = bytes::BytesMut::new();
+
     // 1. 收集所有 SSE 事件
     while let Some(chunk_result) = stream.next().await {
         let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
-        let text = String::from_utf8_lossy(&chunk);
+        buffer.extend_from_slice(&chunk);
 
-        for line in text.lines() {
-            if line.is_empty() {
-                // 空行表示事件结束
-                if !current_data.is_empty() {
-                    if let Ok(data) = serde_json::from_str::<Value>(&current_data) {
-                        events.push(SseEvent {
-                            event_type: current_event_type.clone(),
-                            data,
-                        });
+        // Process complete lines
+        while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+            let line_raw = buffer.split_to(pos + 1);
+            if let Ok(line_str) = std::str::from_utf8(&line_raw) {
+                let line = line_str.trim();
+                if line.is_empty() {
+                    // 空行表示事件结束
+                    if !current_data.is_empty() {
+                        if let Ok(data) = serde_json::from_str::<Value>(&current_data) {
+                            events.push(SseEvent {
+                                event_type: current_event_type.clone(),
+                                data,
+                            });
+                        }
+                        current_event_type.clear();
+                        current_data.clear();
                     }
-                    current_event_type.clear();
-                    current_data.clear();
-                }
-            } else if let Some((key, value)) = parse_sse_line(line) {
-                match key.as_str() {
-                    "event" => current_event_type = value,
-                    "data" => current_data = value,
-                    _ => {}
+                } else if let Some((key, value)) = parse_sse_line(line) {
+                    match key.as_str() {
+                        "event" => current_event_type = value,
+                        "data" => current_data = value,
+                        _ => {}
+                    }
                 }
             }
         }

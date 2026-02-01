@@ -10,10 +10,10 @@ pub mod thinking_utils;
 pub mod collector;
 
 pub use models::*;
-pub use request::transform_claude_request_in;
+pub use request::{transform_claude_request_in, clean_cache_control_from_messages, merge_consecutive_messages};
 pub use response::transform_response;
 pub use streaming::{PartProcessor, StreamingState};
-pub use thinking_utils::close_tool_loop_for_thinking;
+pub use thinking_utils::{close_tool_loop_for_thinking, filter_invalid_thinking_blocks_with_family};
 pub use collector::collect_stream_to_json;
 
 use bytes::Bytes;
@@ -25,6 +25,11 @@ pub fn create_claude_sse_stream(
     mut gemini_stream: Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>,
     trace_id: String,
     email: String,
+    session_id: Option<String>, // [NEW v3.3.17] Session ID for signature caching
+    scaling_enabled: bool, // [NEW] Flag for context usage scaling
+    context_limit: u32,
+    estimated_prompt_tokens: Option<u32>, // [FIX] Estimated tokens for calibrator learning
+    message_count: usize, // [NEW v4.0.0] Message count for rewind detection
 ) -> Pin<Box<dyn Stream<Item = Result<Bytes, String>> + Send>> {
     use async_stream::stream;
     use bytes::BytesMut;
@@ -32,33 +37,101 @@ pub fn create_claude_sse_stream(
 
     Box::pin(stream! {
         let mut state = StreamingState::new();
+        state.session_id = session_id; // Set session ID for signature caching
+        state.message_count = message_count; // [NEW v4.0.0] Set message count
+        state.scaling_enabled = scaling_enabled; // Set scaling enabled flag
+        state.context_limit = context_limit;
+        state.estimated_prompt_tokens = estimated_prompt_tokens; // [FIX] Pass estimated tokens
         let mut buffer = BytesMut::new();
 
-        while let Some(chunk_result) = gemini_stream.next().await {
-            match chunk_result {
-                Ok(chunk) => {
-                    buffer.extend_from_slice(&chunk);
+        loop {
+            // [NEW] 30秒心跳保活: 延长超时时间以兼容长延迟模型
+            let next_chunk = tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                gemini_stream.next()
+            ).await;
 
-                    // Process complete lines
-                    while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
-                        let line_raw = buffer.split_to(pos + 1);
-                        if let Ok(line_str) = std::str::from_utf8(&line_raw) {
-                            let line = line_str.trim();
-                            if line.is_empty() { continue; }
+            match next_chunk {
+                Ok(Some(chunk_result)) => {
+                    match chunk_result {
+                        Ok(chunk) => {
+                            buffer.extend_from_slice(&chunk);
 
-                            if let Some(sse_chunks) = process_sse_line(line, &mut state, &trace_id, &email) {
-                                for sse_chunk in sse_chunks {
-                                    yield Ok(sse_chunk);
+                            // Process complete lines
+                            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+                                let line_raw = buffer.split_to(pos + 1);
+                                if let Ok(line_str) = std::str::from_utf8(&line_raw) {
+                                    let line = line_str.trim();
+                                    if line.is_empty() { continue; }
+
+                                    if let Some(sse_chunks) = process_sse_line(line, &mut state, &trace_id, &email) {
+                                        for sse_chunk in sse_chunks {
+                                            yield Ok(sse_chunk);
+                                        }
+                                    }
                                 }
                             }
                         }
+                        Err(e) => {
+                            yield Err(format!("Stream error: {}", e));
+                            break;
+                        }
                     }
                 }
-                Err(e) => {
-                    yield Err(format!("Stream error: {}", e));
-                    break;
+                Ok(None) => break, // Stream 正常结束
+                Err(_) => {
+                    // 超时，发送心跳包 (SSE Comment 格式)
+                    yield Ok(Bytes::from(": ping\n\n"));
                 }
             }
+        }
+
+        // [FIX #859] Post-thinking interruption recovery
+        // If we have sent thinking but NO content (text/tool_use) and the stream ended (or timed out without DONE),
+        // we must provide a fallback to prevent 0-token errors on client side.
+        if state.has_thinking && !state.has_content {
+            tracing::warn!("[{}] Stream interrupted after thinking (No Content). Triggering recovery...", trace_id);
+            
+            // 1. Force close thinking block if open
+            if state.current_block_type() == crate::proxy::mappers::claude::streaming::BlockType::Thinking {
+               let close_chunks = state.end_block();
+               for chunk in close_chunks {
+                   yield Ok(chunk);
+               }
+            }
+
+            // 2. Inject system message to inform user
+            // We use a new text block for this.
+            let recovery_msg = "\n\n[System] Upstream model interrupted after thinking. (Recovered by Antigravity)";
+            let start_chunks = state.start_block(
+                crate::proxy::mappers::claude::streaming::BlockType::Text, 
+                serde_json::json!({ "type": "text", "text": recovery_msg })
+            );
+            for chunk in start_chunks { yield Ok(chunk); }
+            
+            let stop_chunks = state.end_block();
+            for chunk in stop_chunks { yield Ok(chunk); }
+
+            // 3. Mark as content received so we don't trigger this again (though loop is done)
+            state.has_content = true;
+
+            // 4. Send a simulated usage update to ensure we have > 0 output tokens
+            // Estimate based on some default if we didn't get any usage
+            let recovery_usage = crate::proxy::mappers::claude::models::Usage {
+                input_tokens: 0, // We don't know input, but output is critical
+                output_tokens: 100, // Arbitrary small number to satisfy client
+                cache_read_input_tokens: None,
+                cache_creation_input_tokens: None,
+                server_tool_use: None,
+            };
+
+            let delta = serde_json::json!({
+                "type": "message_delta",
+                "delta": { "stop_reason": "end_turn", "stop_sequence": null },
+                "usage": recovery_usage
+            });
+
+            yield Ok(state.emit("message_delta", delta));
         }
 
         // Ensure termination events are sent
@@ -98,27 +171,14 @@ fn process_sse_line(line: &str, state: &mut StreamingState, trace_id: &str, emai
     // 解包 response 字段 (如果存在)
     let raw_json = json_value.get("response").unwrap_or(&json_value);
 
-    // 101. 发送 message_start
+    // 发送 message_start
     if !state.message_start_sent {
-        // [NEW] Catch Gemini errors encoded in SSE data before sending message_start
-        if let Some(error) = raw_json.get("error") {
-            tracing::error!("[{}] [Claude-SSE] Upstream returned error in stream: {:?}", trace_id, error);
-            chunks.push(state.emit("error", serde_json::json!({
-                "type": "error",
-                "error": {
-                    "type": "overloaded_error",
-                    "message": format!("Upstream error: {}", error.get("message").and_then(|v| v.as_str()).unwrap_or("Unknown Gemini error"))
-                }
-            })));
-            return Some(chunks);
-        }
-
         chunks.push(state.emit_message_start(raw_json));
     }
 
-    // Capture groundingMetadata (Web Search) - Handle both camelCase and snake_case
+    // 捕获 groundingMetadata (Web Search)
     if let Some(candidate) = raw_json.get("candidates").and_then(|c| c.get(0)) {
-        if let Some(grounding) = candidate.get("groundingMetadata").or_else(|| candidate.get("grounding_metadata")) {
+        if let Some(grounding) = candidate.get("groundingMetadata") {
             // 提取搜索词
             if let Some(query) = grounding.get("webSearchQueries")
                 .and_then(|v| v.as_array())
@@ -157,7 +217,7 @@ fn process_sse_line(line: &str, state: &mut StreamingState, trace_id: &str, emai
     // [DISABLED] Temporarily disabled to fix Cherry Studio compatibility
     // Cherry Studio doesn't recognize "web_search_tool_result" type, causing validation errors
     // Search results are still displayed via Markdown text block in streaming.rs (lines 341-381)
-    // TODO: Research Antigravity2Api implementation for correct type mapping
+
     /*
     if let Some(grounding) = raw_json
         .get("candidates")
@@ -174,12 +234,11 @@ fn process_sse_line(line: &str, state: &mut StreamingState, trace_id: &str, emai
     if let Some(finish_reason) = raw_json
         .get("candidates")
         .and_then(|c| c.get(0))
-        .and_then(|cand| cand.get("finishReason").or_else(|| cand.get("finish_reason")))
+        .and_then(|cand| cand.get("finishReason"))
         .and_then(|f| f.as_str())
     {
         let usage = raw_json
             .get("usageMetadata")
-            .or_else(|| raw_json.get("usage_metadata"))
             .and_then(|u| serde_json::from_value::<UsageMetadata>(u.clone()).ok());
 
         if let Some(ref u) = usage {
@@ -212,17 +271,9 @@ fn process_sse_line(line: &str, state: &mut StreamingState, trace_id: &str, emai
 
 /// 发送强制结束事件
 pub fn emit_force_stop(state: &mut StreamingState) -> Vec<Bytes> {
-    let mut chunks = Vec::new();
-
-    // [FIX] Ensure message_start is sent before finishing, even on empty streams
-    if !state.message_start_sent {
-        tracing::warn!("[Claude-SSE] Stream ended without any data. Emitting empty message_start.");
-        chunks.push(state.emit_message_start(&serde_json::json!({})));
-    }
-
     if !state.message_stop_sent {
-        chunks.extend(state.emit_finish(None, None));
-        if !state.message_stop_sent {
+        let mut chunks = state.emit_finish(None, None);
+        if chunks.is_empty() {
             chunks.push(Bytes::from(
                 "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
             ));
@@ -230,11 +281,11 @@ pub fn emit_force_stop(state: &mut StreamingState) -> Vec<Bytes> {
         }
         return chunks;
     }
-    chunks
+    vec![]
 }
 
 /// Process grounding metadata from Gemini's googleSearch and emit as Claude web_search blocks
-#[allow(dead_code)]
+#[allow(dead_code)] // Temporarily disabled for Cherry Studio compatibility, kept for future use
 fn process_grounding_metadata(
     metadata: &serde_json::Value,
     state: &mut StreamingState,
@@ -395,5 +446,59 @@ mod tests {
         assert!(all_text.contains("message_start"));
         assert!(all_text.contains("content_block_start"));
         assert!(all_text.contains("Hello"));
+    }
+
+    #[tokio::test]
+    async fn test_thinking_only_interruption_recovery() {
+        use futures::StreamExt;
+        
+        // 1. 模拟一个只发送 Thinking 然后就结束的流
+        let mock_stream = async_stream::stream! {
+            // 发送 Thinking 块
+            let thinking_json = serde_json::json!({
+                "candidates": [{
+                    "content": {
+                        "parts": [{ "text": "Thinking...", "thought": true }]
+                    }
+                }],
+                "modelVersion": "gemini-2.0-flash-thinking",
+                "responseId": "msg_interrupted"
+            });
+            yield Ok(bytes::Bytes::from(format!("data: {}\n\n", thinking_json)));
+            
+            // 然后突然结束 (没有 Text, 没有 Usage, 直接 None)
+        };
+
+        // 2. 创建转换后的流
+        let mut claude_stream = create_claude_sse_stream(
+            Box::pin(mock_stream),
+            "trace_test".to_string(),
+            "test@example.com".to_string(),
+            None,
+            false,
+            1_000,
+            None,
+            1, // message_count
+        );
+
+        // 3. 收集输出
+        let mut all_chunks = Vec::new();
+        while let Some(result) = claude_stream.next().await {
+            if let Ok(bytes) = result {
+                all_chunks.push(String::from_utf8(bytes.to_vec()).unwrap());
+            }
+        }
+        let output = all_chunks.join("");
+
+        // 4. 验证恢复逻辑
+        // 必须包含 Thinking
+        assert!(output.contains("Thinking..."));
+        
+        // 必须包含恢复的系统提示
+        assert!(output.contains("Recovered by Antigravity"));
+        
+        // 必须包含模拟的 Usage
+        assert!(output.contains("\"usage\":"));
+        assert!(output.contains("\"output_tokens\":100")); // Should contain the recovery usage
     }
 }

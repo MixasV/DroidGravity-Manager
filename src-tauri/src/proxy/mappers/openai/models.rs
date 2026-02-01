@@ -30,6 +30,25 @@ pub struct OpenAIRequest {
     // Codex proprietary fields
     pub instructions: Option<String>,
     pub input: Option<Value>,
+    // [NEW] Image generation parameters (for Chat API compatibility)
+    #[serde(default)]
+    pub size: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default, rename = "personGeneration")]
+    pub person_generation: Option<String>,
+    // [NEW] Thinking/Extended Thinking 支持 (兼容 Anthropic/Claude 协议)
+    #[serde(default)]
+    pub thinking: Option<ThinkingConfig>,
+}
+
+/// Thinking 配置 (兼容 Anthropic 和 OpenAI 扩展协议)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThinkingConfig {
+    #[serde(rename = "type")]
+    pub thinking_type: Option<String>, // "enabled" or "disabled"
+    #[serde(rename = "budget_tokens")]
+    pub budget_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,18 +66,12 @@ pub enum OpenAIContent {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum OpenAIContentBlock {
-    #[serde(rename = "text")]
-    Text {
-        text: String,
-    },
+    #[serde(rename = "text", alias = "input_text")]
+    Text { text: String },
     #[serde(rename = "image_url")]
-    ImageUrl {
-        image_url: OpenAIImageUrl,
-    },
+    ImageUrl { image_url: OpenAIImageUrl },
     #[serde(rename = "audio_url")]
-    AudioUrl {
-        audio_url: AudioUrlContent,
-    },
+    AudioUrl { audio_url: AudioUrlContent },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -108,6 +121,8 @@ pub struct OpenAIResponse {
     pub created: u64,
     pub model: String,
     pub choices: Vec<Choice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<OpenAIUsage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,4 +130,27 @@ pub struct Choice {
     pub index: u32,
     pub message: OpenAIMessage,
     pub finish_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAIUsage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_tokens_details: Option<CompletionTokensDetails>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptTokensDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompletionTokensDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u32>,
 }

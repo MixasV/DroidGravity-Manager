@@ -12,6 +12,15 @@ pub mod i18n;
 pub mod proxy_db;
 pub mod device;
 pub mod update_checker;
+pub mod integration;
+pub mod account_service;
+pub mod security_db;
+pub mod cache;
+pub mod log_bridge;
+pub mod token_stats;
+pub mod http_api;
+pub mod cloudflared;
+pub mod scheduler;
 
 use crate::models;
 

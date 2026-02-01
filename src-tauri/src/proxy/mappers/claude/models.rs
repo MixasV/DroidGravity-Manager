@@ -29,6 +29,11 @@ pub struct ClaudeRequest {
     /// Output configuration for effort level (Claude API v2.0.67+)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_config: Option<OutputConfig>,
+    // [NEW] Image generation parameters (for Anthropic protocol compatibility)
+    #[serde(default)]
+    pub size: Option<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
 }
 
 /// Thinking 配置

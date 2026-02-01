@@ -106,6 +106,9 @@ pub async fn monitor_middleware(
         response_body: None,
         input_tokens: None,
         output_tokens: None,
+        cached_tokens: None,
+        reasoning_tokens: None,
+        protocol: None,
     };
 
     if content_type.contains("text/event-stream") {
@@ -150,6 +153,20 @@ pub async fn monitor_middleware(
                                     .and_then(|v| v.as_u64())
                                     .map(|v| v as u32);
                                 
+                                // [NEW v4.0.8] Extract Cache & Reasoning tokens
+                                log.cached_tokens = usage.get("cache_read_input_tokens")
+                                    .or(usage.get("cached_tokens"))
+                                    .or(usage.get("cached_content_token_count"))
+                                    .or(usage.get("cachedContentTokenCount"))
+                                    .or(usage.get("prompt_tokens_details").and_then(|d| d.get("cached_tokens")))
+                                    .and_then(|v| v.as_u64())
+                                    .map(|v| v as u32);
+                                
+                                log.reasoning_tokens = usage.get("reasoning_tokens")
+                                    .or(usage.get("completion_tokens_details").and_then(|d| d.get("reasoning_tokens")))
+                                    .and_then(|v| v.as_u64())
+                                    .map(|v| v as u32);
+                                
                                 if log.input_tokens.is_none() && log.output_tokens.is_none() {
                                     log.output_tokens = usage.get("total_tokens")
                                         .or(usage.get("totalTokenCount"))
@@ -186,6 +203,20 @@ pub async fn monitor_middleware(
                             log.output_tokens = usage.get("completion_tokens")
                                 .or(usage.get("output_tokens"))
                                 .or(usage.get("candidatesTokenCount"))
+                                .and_then(|v| v.as_u64())
+                                .map(|v| v as u32);
+                                
+                            // [NEW v4.0.8] Extract Cache & Reasoning tokens
+                            log.cached_tokens = usage.get("cache_read_input_tokens")
+                                .or(usage.get("cached_tokens"))
+                                .or(usage.get("cached_content_token_count"))
+                                .or(usage.get("cachedContentTokenCount"))
+                                .or(usage.get("prompt_tokens_details").and_then(|d| d.get("cached_tokens")))
+                                .and_then(|v| v.as_u64())
+                                .map(|v| v as u32);
+                            
+                            log.reasoning_tokens = usage.get("reasoning_tokens")
+                                .or(usage.get("completion_tokens_details").and_then(|d| d.get("reasoning_tokens")))
                                 .and_then(|v| v.as_u64())
                                 .map(|v| v as u32);
                                 

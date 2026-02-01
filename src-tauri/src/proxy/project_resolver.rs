@@ -12,10 +12,12 @@ pub async fn fetch_project_id(access_token: &str) -> Result<String, String> {
         }
     });
     
-    let client = crate::utils::http::create_client(30);
+    let client = crate::utils::http::get_client();
     let response = client
         .post(url)
         .bearer_auth(access_token)
+        // .header("Host", "cloudcode-pa.googleapis.com") // 移除 Host header，因为已切换域名
+
         .header("User-Agent", crate::constants::USER_AGENT.as_str())
         .header("Content-Type", "application/json")
         .json(&request_body)

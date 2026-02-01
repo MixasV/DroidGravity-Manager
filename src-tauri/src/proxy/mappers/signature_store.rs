@@ -12,7 +12,9 @@ fn get_thought_sig_storage() -> &'static Mutex<Option<String>> {
 /// Store thought_signature to global storage.
 /// Only stores if the new signature is longer than the existing one,
 /// to avoid short/partial signatures overwriting valid ones.
-#[allow(dead_code)]
+/// 
+/// DEPRECATED: Use SignatureCache::cache_session_signature instead for session-isolated storage.
+#[allow(dead_code)] // Deprecated, kept for backward compatibility
 pub fn store_thought_signature(sig: &str) {
     if let Ok(mut guard) = get_thought_sig_storage().lock() {
         let should_store = match &*guard {

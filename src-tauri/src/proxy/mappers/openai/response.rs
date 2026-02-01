@@ -22,29 +22,18 @@ pub fn transform_openai_response(gemini_response: &Value) -> OpenAIResponse {
                 .and_then(|p| p.as_array())
             {
                 for part in parts {
-                    // 捕вв thoughtSignature (Gemini 3 工具调用必需)
+                    // 捕获 thoughtSignature (Gemini 3 工具调用必需)
                     if let Some(sig) = part
                         .get("thoughtSignature")
                         .or(part.get("thought_signature"))
                         .and_then(|s| s.as_str())
                     {
-                        // [FIX #545] Decode Base64 signature if present (Gemini sends Base64, but we store RAW)
-                        use base64::Engine;
-                        let raw_sig = match base64::engine::general_purpose::STANDARD.decode(sig) {
-                            Ok(decoded) => match String::from_utf8(decoded) {
-                                Ok(s) => {
-                                    tracing::debug!("[Response-OpenAI] Decoded base64 signature (len {} -> {})", sig.len(), s.len());
-                                    s
-                                },
-                                Err(_) => sig.to_string(),
-                            },
-                            Err(_) => sig.to_string(),
-                        };
-                        super::streaming::store_thought_signature(&raw_sig);
+                        super::streaming::store_thought_signature(sig);
                     }
 
                     // 检查该 part 是否是思考内容 (thought: true)
-                    let is_thought_part = part.get("thought")
+                    let is_thought_part = part
+                        .get("thought")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
 
@@ -90,7 +79,8 @@ pub fn transform_openai_response(gemini_response: &Value) -> OpenAIResponse {
                             .unwrap_or("image/png");
                         let data = img.get("data").and_then(|v| v.as_str()).unwrap_or("");
                         if !data.is_empty() {
-                            content_out.push_str(&format!("![image](data:{};base64,{})", mime_type, data));
+                            content_out
+                                .push_str(&format!("![image](data:{};base64,{})", mime_type, data));
                         }
                     }
                 }
@@ -101,7 +91,8 @@ pub fn transform_openai_response(gemini_response: &Value) -> OpenAIResponse {
                 let mut grounding_text = String::new();
 
                 // 1. 处理搜索词
-                if let Some(queries) = grounding.get("webSearchQueries").and_then(|q| q.as_array()) {
+                if let Some(queries) = grounding.get("webSearchQueries").and_then(|q| q.as_array())
+                {
                     let query_list: Vec<&str> = queries.iter().filter_map(|v| v.as_str()).collect();
                     if !query_list.is_empty() {
                         grounding_text.push_str("\n\n---\n**🔍 已为您搜索：** ");
@@ -174,6 +165,36 @@ pub fn transform_openai_response(gemini_response: &Value) -> OpenAIResponse {
         }
     }
 
+    // Extract and map usage metadata from Gemini to OpenAI format
+    let usage = raw.get("usageMetadata").and_then(|u| {
+        let prompt_tokens = u
+            .get("promptTokenCount")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        let completion_tokens = u
+            .get("candidatesTokenCount")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        let total_tokens = u
+            .get("totalTokenCount")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        let cached_tokens = u
+            .get("cachedContentTokenCount")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32);
+
+        Some(super::models::OpenAIUsage {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            prompt_tokens_details: cached_tokens.map(|ct| super::models::PromptTokensDetails {
+                cached_tokens: Some(ct),
+            }),
+            completion_tokens_details: None,
+        })
+    });
+
     OpenAIResponse {
         id: raw
             .get("responseId")
@@ -188,6 +209,7 @@ pub fn transform_openai_response(gemini_response: &Value) -> OpenAIResponse {
             .unwrap_or("unknown")
             .to_string(),
         choices,
+        usage,
     }
 }
 
@@ -205,7 +227,7 @@ mod tests {
                 },
                 "finishReason": "STOP"
             }],
-            "modelVersion": "gemini-2.5-pro",
+            "modelVersion": "gemini-2.5-flash",
             "responseId": "resp_123"
         });
 
@@ -217,5 +239,48 @@ mod tests {
         };
         assert_eq!(content, "Hello!");
         assert_eq!(result.choices[0].finish_reason, Some("stop".to_string()));
+    }
+
+    #[test]
+    fn test_usage_metadata_mapping() {
+        let gemini_resp = json!({
+            "candidates": [{
+                "content": {"parts": [{"text": "Hello!"}]},
+                "finishReason": "STOP"
+            }],
+            "usageMetadata": {
+                "promptTokenCount": 100,
+                "candidatesTokenCount": 50,
+                "totalTokenCount": 150,
+                "cachedContentTokenCount": 25
+            },
+            "modelVersion": "gemini-2.5-flash",
+            "responseId": "resp_123"
+        });
+
+        let result = transform_openai_response(&gemini_resp);
+
+        assert!(result.usage.is_some());
+        let usage = result.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, 100);
+        assert_eq!(usage.completion_tokens, 50);
+        assert_eq!(usage.total_tokens, 150);
+        assert!(usage.prompt_tokens_details.is_some());
+        assert_eq!(usage.prompt_tokens_details.unwrap().cached_tokens, Some(25));
+    }
+
+    #[test]
+    fn test_response_without_usage_metadata() {
+        let gemini_resp = json!({
+            "candidates": [{
+                "content": {"parts": [{"text": "Hello!"}]},
+                "finishReason": "STOP"
+            }],
+            "modelVersion": "gemini-2.5-flash",
+            "responseId": "resp_123"
+        });
+
+        let result = transform_openai_response(&gemini_resp);
+        assert!(result.usage.is_none());
     }
 }

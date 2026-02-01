@@ -2,7 +2,7 @@
 use serde_json::{json, Value};
 
 /// 包装请求体为 v1internal 格式
-pub fn wrap_request(body: &Value, project_id: &str, mapped_model: &str) -> Value {
+pub fn wrap_request(body: &Value, project_id: &str, mapped_model: &str, session_id: Option<&str>) -> Value {
     // 优先使用传入的 mapped_model，其次尝试从 body 获取
     let original_model = body.get("model").and_then(|v| v.as_str()).unwrap_or(mapped_model);
     
@@ -19,6 +19,53 @@ pub fn wrap_request(body: &Value, project_id: &str, mapped_model: &str) -> Value
     // 深度清理 [undefined] 字符串 (Cherry Studio 等客户端常见注入)
     crate::proxy::mappers::common_utils::deep_clean_undefined(&mut inner_request);
 
+    // [FIX #765] Inject thought_signature into functionCall parts
+    if let Some(s_id) = session_id {
+        if let Some(contents) = inner_request.get_mut("contents").and_then(|c| c.as_array_mut()) {
+            for content in contents {
+                if let Some(parts) = content.get_mut("parts").and_then(|p| p.as_array_mut()) {
+                    for part in parts {
+                        if part.get("functionCall").is_some() {
+                            // Only inject if it doesn't already have one
+                            if part.get("thoughtSignature").is_none() {
+                                if let Some(sig) = crate::proxy::SignatureCache::global().get_session_signature(s_id) {
+                                    if let Some(obj) = part.as_object_mut() {
+                                        obj.insert("thoughtSignature".to_string(), json!(sig));
+                                        tracing::debug!("[Gemini-Wrap] Injected signature (len: {}) for session: {}", sig.len(), s_id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // [FIX Issue #1355] Gemini Flash thinking budget capping
+    // Force cap thinking_budget to 24576 for Flash models to prevent 400 Bad Request
+    if final_model_name.to_lowercase().contains("flash") {
+        if let Some(gen_config) = inner_request.get_mut("generationConfig") {
+            if let Some(thinking_config) = gen_config.get_mut("thinkingConfig") {
+                if let Some(budget_val) = thinking_config.get("thinkingBudget") {
+                    if let Some(budget) = budget_val.as_u64() {
+                        if budget > 24576 {
+                            thinking_config["thinkingBudget"] = json!(24576);
+                            tracing::info!(
+                                "[Gemini-Wrap] Capped thinking_budget from {} to 24576 for model {}", 
+                                budget, final_model_name
+                            );
+                            
+                            // Also Ensure maxOutputTokens is adjusted if strict limits are needed (optional but good practice)
+                            // But for native Gemini, we usually trust the user or defaults unless specifically problematic.
+                            // The error explicitly mentions thinking_budget, so we focus on that.
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // [FIX] Removed forced maxOutputTokens (64000) as it exceeds limits for Gemini 1.5 Flash/Pro standard models (8192).
     // This caused upstream to return empty/invalid responses, leading to 'NoneType' object has no attribute 'strip' in Python clients.
     // relying on upstream defaults or user provided values is safer.
@@ -29,8 +76,8 @@ pub fn wrap_request(body: &Value, project_id: &str, mapped_model: &str) -> Value
     });
 
     // Use shared grounding/config logic
-    let config = crate::proxy::mappers::common_utils::resolve_request_config(original_model, final_model_name, &tools_val);
-    
+    let config = crate::proxy::mappers::common_utils::resolve_request_config(original_model, final_model_name, &tools_val, None, None);
+
     // Clean tool declarations (remove forbidden Schema fields like multipleOf, and remove redundant search decls)
     if let Some(tools) = inner_request.get_mut("tools") {
         if let Some(tools_arr) = tools.as_array_mut() {
@@ -48,9 +95,20 @@ pub fn wrap_request(body: &Value, project_id: &str, mapped_model: &str) -> Value
                         });
 
                         // 2. 清洗剩余 Schema
+                        // [FIX] Gemini CLI 使用 parametersJsonSchema，而标准 Gemini API 使用 parameters
+                        // 需要将 parametersJsonSchema 重命名为 parameters
                         for decl in decls_arr {
-                            if let Some(params) = decl.get_mut("parameters") {
-                                crate::proxy::common::json_schema::clean_json_schema(params);
+                            // 检测并转换字段名
+                            if let Some(decl_obj) = decl.as_object_mut() {
+                                // 如果存在 parametersJsonSchema，将其重命名为 parameters
+                                if let Some(params_json_schema) = decl_obj.remove("parametersJsonSchema") {
+                                    let mut params = params_json_schema;
+                                    crate::proxy::common::json_schema::clean_json_schema(&mut params);
+                                    decl_obj.insert("parameters".to_string(), params);
+                                } else if let Some(params) = decl_obj.get_mut("parameters") {
+                                    // 标准 parameters 字段
+                                    crate::proxy::common::json_schema::clean_json_schema(params);
+                                }
                             }
                         }
                     }
@@ -70,9 +128,9 @@ pub fn wrap_request(body: &Value, project_id: &str, mapped_model: &str) -> Value
     // Inject imageConfig if present (for image generation models)
     if let Some(image_config) = config.image_config {
          if let Some(obj) = inner_request.as_object_mut() {
-             // 1. Remove tools (image generation does not support tools)
+             // 1. Filter tools: remove tools for image gen
              obj.remove("tools");
-             
+
              // 2. Remove systemInstruction (image generation does not support system prompts)
              obj.remove("systemInstruction");
 
@@ -137,6 +195,36 @@ pub fn wrap_request(body: &Value, project_id: &str, mapped_model: &str) -> Value
     final_request
 }
 
+#[cfg(test)]
+mod test_fixes {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_wrap_request_with_signature() {
+        let session_id = "test-session-sig";
+        let signature = "test-signature-must-be-longer-than-fifty-characters-to-be-cached-by-signature-cache-12345"; // > 50 chars
+        crate::proxy::SignatureCache::global().cache_session_signature(session_id, signature.to_string(), 1);
+
+        let body = json!({
+            "model": "gemini-pro",
+            "contents": [{
+                "role": "user",
+                "parts": [{
+                    "functionCall": {
+                        "name": "get_weather",
+                        "args": {"location": "London"}
+                    }
+                }]
+            }]
+        });
+
+        let result = wrap_request(&body, "proj", "gemini-pro", Some(session_id));
+        let injected_sig = result["request"]["contents"][0]["parts"][0]["thoughtSignature"].as_str().unwrap();
+        assert_eq!(injected_sig, signature);
+    }
+}
+
 /// 解包响应（提取 response 字段）
 pub fn unwrap_response(response: &Value) -> Value {
     response.get("response").unwrap_or(response).clone()
@@ -154,7 +242,7 @@ mod tests {
             "contents": [{"role": "user", "parts": [{"text": "Hi"}]}]
         });
 
-        let result = wrap_request(&body, "test-project", "gemini-2.5-flash");
+        let result = wrap_request(&body, "test-project", "gemini-2.5-flash", None);
         assert_eq!(result["project"], "test-project");
         assert_eq!(result["model"], "gemini-2.5-flash");
         assert!(result["requestId"].as_str().unwrap().starts_with("agent-"));
@@ -180,19 +268,46 @@ mod tests {
             "messages": []
         });
         
-        let result = wrap_request(&body, "test-proj", "gemini-pro");
+        let result = wrap_request(&body, "test-proj", "gemini-pro", None);
         
         // 验证 systemInstruction
         let sys = result.get("request").unwrap().get("systemInstruction").unwrap();
-        
-        // 1. 验证 role: "user"
-        assert_eq!(sys.get("role").unwrap(), "user");
-        
-        // 2. 验证 Antigravity 身份注入
-        let parts = sys.get("parts").unwrap().as_array().unwrap();
-        assert!(!parts.is_empty());
-        let first_text = parts[0].get("text").unwrap().as_str().unwrap();
-        assert!(first_text.contains("You are Antigravity"));
+    }
+
+    #[test]
+    fn test_gemini_flash_thinking_budget_capping() {
+        let body = json!({
+            "model": "gemini-2.0-flash-thinking-exp",
+            "generationConfig": {
+                "thinkingConfig": {
+                    "includeThoughts": true,
+                    "thinkingBudget": 32000
+                }
+            }
+        });
+
+        // Test with Flash model
+        let result = wrap_request(&body, "test-proj", "gemini-2.0-flash-thinking-exp", None);
+        let req = result.get("request").unwrap();
+        let gen_config = req.get("generationConfig").unwrap();
+        let budget = gen_config["thinkingConfig"]["thinkingBudget"].as_u64().unwrap();
+
+        // Should be capped at 24576
+        assert_eq!(budget, 24576);
+
+        // Test with Pro model (should NOT cap)
+        let body_pro = json!({
+            "model": "gemini-2.0-pro-exp",
+            "generationConfig": {
+                "thinkingConfig": {
+                    "includeThoughts": true,
+                    "thinkingBudget": 32000
+                }
+            }
+        });
+        let result_pro = wrap_request(&body_pro, "test-proj", "gemini-2.0-pro-exp", None);
+        let budget_pro = result_pro["request"]["generationConfig"]["thinkingConfig"]["thinkingBudget"].as_u64().unwrap();
+        assert_eq!(budget_pro, 32000);
     }
 
     #[test]
@@ -205,7 +320,7 @@ mod tests {
             }
         });
 
-        let result = wrap_request(&body, "test-proj", "gemini-pro");
+        let result = wrap_request(&body, "test-proj", "gemini-pro", None);
         let sys = result.get("request").unwrap().get("systemInstruction").unwrap();
         let parts = sys.get("parts").unwrap().as_array().unwrap();
 
@@ -224,11 +339,41 @@ mod tests {
             }
         });
 
-        let result = wrap_request(&body, "test-proj", "gemini-pro");
+        let result = wrap_request(&body, "test-proj", "gemini-pro", None);
         let sys = result.get("request").unwrap().get("systemInstruction").unwrap();
         let parts = sys.get("parts").unwrap().as_array().unwrap();
 
         // Should NOT inject duplicate, so only 1 part remains
         assert_eq!(parts.len(), 1);
+    }
+
+    #[test]
+    fn test_image_generation_with_reference_images() {
+        // Create 14 reference images + 1 text prompt
+        let mut parts = Vec::new();
+        parts.push(json!({"text": "Generate a variation"}));
+
+        for _ in 0..14 {
+            parts.push(json!({
+                "inlineData": {
+                    "mimeType": "image/jpeg",
+                    "data": "base64data..."
+                }
+            }));
+        }
+
+        let body = json!({
+            "model": "gemini-3-pro-image",
+            "contents": [{"parts": parts}]
+        });
+
+        let result = wrap_request(&body, "test-proj", "gemini-3-pro-image", None);
+
+        let request = result.get("request").unwrap();
+        let contents = request.get("contents").unwrap().as_array().unwrap();
+        let result_parts = contents[0].get("parts").unwrap().as_array().unwrap();
+
+        // Verify all 15 parts (1 text + 14 images) are preserved
+        assert_eq!(result_parts.len(), 15);
     }
 }

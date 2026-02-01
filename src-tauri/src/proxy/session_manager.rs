@@ -8,22 +8,28 @@ pub struct SessionManager;
 
 impl SessionManager {
     /// 根据 Claude 请求生成稳定的会话指纹 (Session Fingerprint)
+    /// 
+    /// 设计理念:
+    /// - 只哈希第一条用户消息内容,不混入模型名称或时间戳
+    /// - 确保同一对话的所有轮次使用相同的 session_id
+    /// - 最大化 prompt caching 的命中率
+    /// 
+    /// 优先级:
+    /// 1. metadata.user_id (客户端显式提供)
+    /// 2. 第一条用户消息的 SHA256 哈希
     pub fn extract_session_id(request: &ClaudeRequest) -> String {
         // 1. 优先使用 metadata 中的 user_id
         if let Some(metadata) = &request.metadata {
             if let Some(user_id) = &metadata.user_id {
                 if !user_id.is_empty() && !user_id.contains("session-") {
+                    tracing::debug!("[SessionManager] Using explicit user_id: {}", user_id);
                     return user_id.clone();
                 }
             }
         }
 
-        // 2. 备选方案：智能内容指纹 (SHA256)
-        // 策略：提取第一条核心用户消息，移除空白和系统干扰项
+        // 2. 备选方案：基于第一条用户消息的 SHA256 哈希
         let mut hasher = Sha256::new();
-        
-        // 混入模型名称增加区分度
-        hasher.update(request.model.as_bytes());
 
         let mut content_found = false;
         for msg in &request.messages {
@@ -61,14 +67,18 @@ impl SessionManager {
         let hash = format!("{:x}", hasher.finalize());
         let sid = format!("sid-{}", &hash[..16]);
         
-        tracing::debug!("[SessionManager] Generated fingerprint: {} for model {}", sid, request.model);
+        tracing::debug!(
+            "[SessionManager] Generated session_id: {} (content_found: {}, model: {})", 
+            sid,
+            content_found,
+            request.model
+        );
         sid
     }
 
     /// 根据 OpenAI 请求生成稳定的会话指纹
     pub fn extract_openai_session_id(request: &OpenAIRequest) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(request.model.as_bytes());
 
         let mut content_found = false;
         for msg in &request.messages {
@@ -109,9 +119,8 @@ impl SessionManager {
     }
 
     /// 根据 Gemini 原生请求 (JSON) 生成稳定的会话指纹
-    pub fn extract_gemini_session_id(request: &Value, model_name: &str) -> String {
+    pub fn extract_gemini_session_id(request: &Value, _model_name: &str) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(model_name.as_bytes());
 
         let mut content_found = false;
         if let Some(contents) = request.get("contents").and_then(|v| v.as_array()) {

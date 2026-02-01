@@ -223,10 +223,13 @@ pub fn transform_openai_request(request: &OpenAIRequest, project_id: &str, mappe
         (mapped_model.ends_with("-high") || mapped_model.ends_with("-low") || mapped_model.contains("-pro"));
 
     let mut gen_config = json!({
-        "maxOutputTokens": request.max_tokens.unwrap_or(64000),
         "temperature": request.temperature.unwrap_or(1.0),
         "topP": request.top_p.unwrap_or(1.0), 
     });
+
+    if let Some(max_tokens) = request.max_tokens {
+        gen_config["maxOutputTokens"] = json!(max_tokens);
+    }
 
     // [NEW] 支持多候选结果数量 (n -> candidateCount)
     if let Some(n) = request.n {
@@ -327,6 +330,12 @@ pub fn transform_openai_request(request: &OpenAIRequest, project_id: &str, mappe
         
         if !function_declarations.is_empty() {
             inner_request["tools"] = json!([{ "functionDeclarations": function_declarations }]);
+            // [FIX] Explicitly set tool choice mode to VALIDATED to prevent hallucination (v3.3.30)
+            inner_request["toolConfig"] = json!({
+                "functionCallingConfig": {
+                    "mode": "VALIDATED"
+                }
+            });
         }
     }
     

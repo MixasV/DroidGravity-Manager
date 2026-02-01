@@ -163,7 +163,23 @@ impl NonStreamingProcessor {
 
     /// 处理单个 part
     fn process_part(&mut self, part: &GeminiPart) {
-        let signature = part.thought_signature.clone();
+        // [FIX #545] Decode Base64 signature if present (Gemini sends Base64, Claude expects Raw)
+        let signature = part.thought_signature.as_ref().map(|sig| {
+            // Try to decode as base64
+            use base64::Engine;
+            match base64::engine::general_purpose::STANDARD.decode(sig) {
+                Ok(decoded_bytes) => {
+                    match String::from_utf8(decoded_bytes) {
+                        Ok(decoded_str) => {
+                            tracing::debug!("[Response] Decoded base64 signature (len {} -> {})", sig.len(), decoded_str.len());
+                            decoded_str
+                        },
+                        Err(_) => sig.clone() // Not valid UTF-8, keep as is
+                    }
+                },
+                Err(_) => sig.clone() // Not base64, keep as is
+            }
+        });
 
         // 1. FunctionCall 处理
         if let Some(fc) = &part.function_call {

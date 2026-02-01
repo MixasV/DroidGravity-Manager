@@ -181,17 +181,30 @@ impl TokenManager {
     /// 参数 `quota_group` 用于区分 "claude" vs "gemini" 组
     /// 参数 `force_rotate` 为 true 时将忽略锁定，强制切换账号
     /// 参数 `session_id` 用于跨请求维持会话粘性
-    pub async fn get_token(&self, quota_group: &str, force_rotate: bool, session_id: Option<&str>) -> Result<(String, String, String), String> {
+    /// 参数 `model` 用于模型级别限流检查
+    pub async fn get_token(
+        &self, 
+        quota_group: &str, 
+        force_rotate: bool, 
+        session_id: Option<&str>,
+        model: Option<&str>
+    ) -> Result<(String, String, String), String> {
         // 【优化 Issue #284】添加 5 秒超时，防止死锁
         let timeout_duration = std::time::Duration::from_secs(5);
-        match tokio::time::timeout(timeout_duration, self.get_token_internal(quota_group, force_rotate, session_id)).await {
+        match tokio::time::timeout(timeout_duration, self.get_token_internal(quota_group, force_rotate, session_id, model)).await {
             Ok(result) => result,
             Err(_) => Err("Token acquisition timeout (5s) - system too busy or deadlock detected".to_string()),
         }
     }
 
     /// 内部实现：获取 Token 的核心逻辑
-    async fn get_token_internal(&self, quota_group: &str, force_rotate: bool, session_id: Option<&str>) -> Result<(String, String, String), String> {
+    async fn get_token_internal(
+        &self, 
+        quota_group: &str, 
+        force_rotate: bool, 
+        session_id: Option<&str>,
+        model: Option<&str>
+    ) -> Result<(String, String, String), String> {
         let mut tokens_snapshot: Vec<ProxyToken> = self.tokens.iter().map(|e| e.value().clone()).collect();
         let total = tokens_snapshot.len();
         if total == 0 {
@@ -242,8 +255,8 @@ impl TokenManager {
                     // 【修复】先通过 account_id 找到对应的账号，获取其 email
                     // 因为限流记录是以 email 为 key 存储的
                     if let Some(bound_token) = tokens_snapshot.iter().find(|t| t.account_id == bound_id) {
-                        // 2. 使用 email 检查绑定的账号是否限流
-                        let reset_sec = self.rate_limit_tracker.get_remaining_wait(&bound_token.email);
+                        // 2. 使用 email 检查绑定的账号是否限流 (支持模型级别)
+                        let reset_sec = self.rate_limit_tracker.get_remaining_wait_v2(&bound_token.email, model);
                         if reset_sec > 0 {
                             // 【修复 Issue #284】立即解绑并切换账号，不再阻塞等待
                             // 原因：阻塞等待会导致并发请求时客户端 socket 超时 (UND_ERR_SOCKET)
@@ -271,8 +284,8 @@ impl TokenManager {
                 if let Some((account_id, last_time)) = &last_used_account_id {
                     if last_time.elapsed().as_secs() < 60 && !attempted.contains(account_id) {
                         if let Some(found) = tokens_snapshot.iter().find(|t| &t.account_id == account_id) {
-                            // 【修复】检查限流状态，避免复用已被锁定的账号
-                            if !self.is_rate_limited(&found.email) {
+                            // 【修复】检查限流状态，避免复用已被锁定的账号 (支持模型级别)
+                            if !self.is_rate_limited_v2(&found.email, model) {
                                 tracing::debug!("60s Window: Force reusing last account: {}", found.email);
                                 target_token = Some(found.clone());
                             } else {
@@ -293,7 +306,7 @@ impl TokenManager {
                         }
 
                         // 【新增】主动避开限流或 5xx 锁定的账号 (来自 PR #28 的高可用思路)
-                        if self.is_rate_limited(&candidate.account_id) {
+                        if self.is_rate_limited_v2(&candidate.email, model) {
                             continue;
                         }
 
@@ -322,7 +335,7 @@ impl TokenManager {
                     }
 
                     // 【新增】主动避开限流或 5xx 锁定的账号
-                    if self.is_rate_limited(&candidate.account_id) {
+                    if self.is_rate_limited_v2(&candidate.email, model) {
                         continue;
                     }
 
@@ -343,7 +356,10 @@ impl TokenManager {
                     
                     // 计算最短等待时间
                     let min_wait = tokens_snapshot.iter()
-                        .filter_map(|t| self.rate_limit_tracker.get_reset_seconds(&t.account_id))
+                        .filter_map(|t| {
+                            let w = self.rate_limit_tracker.get_remaining_wait_v2(&t.email, model);
+                            if w > 0 { Some(w) } else { None }
+                        })
                         .min();
                     
                     // Layer 1: 如果最短等待时间 <= 2秒,执行缓冲延迟
@@ -359,7 +375,7 @@ impl TokenManager {
                             
                             // 重新尝试选择账号
                             let retry_token = tokens_snapshot.iter()
-                                .find(|t| !attempted.contains(&t.account_id) && !self.is_rate_limited(&t.account_id));
+                                .find(|t| !attempted.contains(&t.account_id) && !self.is_rate_limited_v2(&t.email, model));
                             
                             if let Some(t) = retry_token {
                                 tracing::info!("✅ Buffer delay successful! Found available account: {}", t.email);

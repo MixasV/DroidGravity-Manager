@@ -1083,15 +1083,18 @@ fn build_generation_config(
         config["candidateCount"] = json!(1);
     }*/
 
-    // max_tokens 映射为 maxOutputTokens
-    config["maxOutputTokens"] = json!(64000);
+    // [FIX] Removed forced maxOutputTokens (64000) as it exceeds limits for Gemini 1.5 standard models.
+    // Relying on upstream defaults is safer unless explicitly requested.
+    if let Some(max_tokens) = claude_req.max_tokens {
+        config["maxOutputTokens"] = json!(max_tokens);
+    }
 
     // [优化] 设置全局停止序列,防止流式输出冗余
+    // [FIX] Removed "[DONE]" from stop sequences as it causes premature truncation in some models.
     config["stopSequences"] = json!([
         "<|user|>",
         "<|endoftext|>",
         "<|end_of_turn|>",
-        "[DONE]",
         "\n\nHuman:"
     ]);
 

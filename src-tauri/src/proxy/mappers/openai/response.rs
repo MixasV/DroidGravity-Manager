@@ -22,13 +22,25 @@ pub fn transform_openai_response(gemini_response: &Value) -> OpenAIResponse {
                 .and_then(|p| p.as_array())
             {
                 for part in parts {
-                    // 捕获 thoughtSignature (Gemini 3 工具调用必需)
+                    // 捕вв thoughtSignature (Gemini 3 工具调用必需)
                     if let Some(sig) = part
                         .get("thoughtSignature")
                         .or(part.get("thought_signature"))
                         .and_then(|s| s.as_str())
                     {
-                        super::streaming::store_thought_signature(sig);
+                        // [FIX #545] Decode Base64 signature if present (Gemini sends Base64, but we store RAW)
+                        use base64::Engine;
+                        let raw_sig = match base64::engine::general_purpose::STANDARD.decode(sig) {
+                            Ok(decoded) => match String::from_utf8(decoded) {
+                                Ok(s) => {
+                                    tracing::debug!("[Response-OpenAI] Decoded base64 signature (len {} -> {})", sig.len(), s.len());
+                                    s
+                                },
+                                Err(_) => sig.to_string(),
+                            },
+                            Err(_) => sig.to_string(),
+                        };
+                        super::streaming::store_thought_signature(&raw_sig);
                     }
 
                     // 检查该 part 是否是思考内容 (thought: true)

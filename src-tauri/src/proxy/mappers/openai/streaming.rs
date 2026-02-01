@@ -20,21 +20,33 @@ fn get_thought_sig_storage() -> &'static Mutex<Option<String>> {
 /// 保存 thoughtSignature 到全局存储
 /// 注意：只在新签名比现有签名更长时才存储，避免短签名覆盖有效签名
 pub fn store_thought_signature(sig: &str) {
+    // [FIX #545] Decode Base64 signature if present (Gemini sends Base64, but we store RAW)
+    let raw_sig = match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, sig) {
+        Ok(decoded) => match String::from_utf8(decoded) {
+            Ok(s) => {
+                tracing::debug!("[ThoughtSig] Decoded base64 signature (len {} -> {})", sig.len(), s.len());
+                s
+            },
+            Err(_) => sig.to_string(),
+        },
+        Err(_) => sig.to_string(),
+    };
+
     if let Ok(mut guard) = get_thought_sig_storage().lock() {
         let should_store = match &*guard {
             None => true, // 没有签名，直接存储
-            Some(existing) => sig.len() > existing.len(), // 只有新签名更长才存储
+            Some(existing) => raw_sig.len() > existing.len(), // 只有新签名更长才存储
         };
         
         if should_store {
             tracing::debug!("[ThoughtSig] 存储新签名 (长度: {}，替换旧长度: {:?})", 
-                sig.len(), 
+                raw_sig.len(), 
                 guard.as_ref().map(|s| s.len())
             );
-            *guard = Some(sig.to_string());
+            *guard = Some(raw_sig);
         } else {
             tracing::debug!("[ThoughtSig] 跳过短签名 (新长度: {}，现有长度: {})", 
-                sig.len(), 
+                raw_sig.len(), 
                 guard.as_ref().map(|s| s.len()).unwrap_or(0)
             );
         }

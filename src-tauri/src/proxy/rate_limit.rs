@@ -51,15 +51,67 @@ impl RateLimitTracker {
         }
     }
     
-    /// 获取账号剩余的等待时间(秒)
-    pub fn get_remaining_wait(&self, account_id: &str) -> u64 {
-        if let Some(info) = self.limits.get(account_id) {
+    /// 获取账号/模型剩余的等待时间(秒)
+    /// 
+    /// 如果同时存在账号级和模型级限制，返回最长的等待时间
+    pub fn get_remaining_wait_v2(&self, email: &str, model: Option<&str>) -> u64 {
+        let mut max_wait = 0;
+
+        // 1. 检查账号级限制
+        if let Some(info) = self.limits.get(email) {
             let now = SystemTime::now();
             if info.reset_time > now {
-                return info.reset_time.duration_since(now).unwrap_or(Duration::from_secs(0)).as_secs();
+                max_wait = info.reset_time.duration_since(now).unwrap_or(Duration::from_secs(0)).as_secs();
             }
         }
-        0
+
+        // 2. 检查模型级限制 (key format: "email:model")
+        if let Some(m) = model {
+            let composite_key = format!("{}:{}", email, m);
+            if let Some(info) = self.limits.get(&composite_key) {
+                let now = SystemTime::now();
+                if info.reset_time > now {
+                    let model_wait = info.reset_time.duration_since(now).unwrap_or(Duration::from_secs(0)).as_secs();
+                    max_wait = max_wait.max(model_wait);
+                }
+            }
+        }
+
+        max_wait
+    }
+
+    /// 标记账号/模型限流 (兼容旧版本)
+    pub fn mark_rate_limited_v2(
+        &self,
+        email: &str,
+        status: u16,
+        retry_after_header: Option<&str>,
+        body: &str,
+        model: Option<String>,
+    ) -> Option<RateLimitInfo> {
+        let mut info = self.parse_from_error(email, status, retry_after_header, body, model.clone())?;
+        
+        // 如果提供了模型，且原因属于模型级限制，则使用复合键存储
+        if let Some(m) = model {
+            let use_composite = match info.reason {
+                RateLimitReason::ModelCapacityExhausted | RateLimitReason::RateLimitExceeded => true,
+                // QuotaExhausted 可能是账号级也可能是模型级，保守起见如果带了模型就存复合键？
+                // Google 的 Quota 报错通常带具体的 quota limit name
+                RateLimitReason::QuotaExhausted if body.contains("per minute") => true,
+                _ => false,
+            };
+
+            if use_composite {
+                let composite_key = format!("{}:{}", email, m);
+                tracing::info!("[RateLimit] 存储模型级限流记录: {}", composite_key);
+                self.limits.insert(composite_key, info.clone());
+                return Some(info);
+            }
+        }
+
+        // 默认存账号级
+        self.limits.insert(email.to_string(), info.clone());
+        Some(info)
     }
     
     /// 标记账号请求成功，重置连续失败计数

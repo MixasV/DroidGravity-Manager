@@ -173,10 +173,16 @@ fn clean_json_schema_recursive(value: &mut Value) {
                 "deprecated",       // [NEW] Gemini doesn't understand this
                 "readOnly",         // [NEW]
                 "writeOnly",        // [NEW]
+                "title",            // [NEW] metadata not needed for API
+                "xml",              // [NEW] swagger/openapi specific
+                "externalDocs",     // [NEW]
             ];
             for field in hard_remove_fields {
                 map.remove(field);
             }
+
+            // [NEW] Remove all vendor extensions (x-* fields)
+            map.retain(|k, _| !k.starts_with("x-"));
 
             // [NEW FIX] 确保 required 中的字段一定在 properties 中存在
             // Gemini 严格校验：required 中的字段如果不在 properties 中定义，会报 INVALID_ARGUMENT

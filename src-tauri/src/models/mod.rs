@@ -5,6 +5,6 @@ pub mod config;
 
 pub use account::{Account, AccountIndex, AccountSummary, DeviceProfile, DeviceProfileVersion, AccountExportItem, AccountExportResponse};
 pub use token::TokenData;
-pub use quota::QuotaData;
+pub use quota::{QuotaData, RefreshStats};
 pub use config::{AppConfig, QuotaProtectionConfig, CircuitBreakerConfig};
 

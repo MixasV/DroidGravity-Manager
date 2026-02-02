@@ -1,5 +1,4 @@
-use serde_json::json;
-use crate::models::{AppConfig, AccountExportItem, AccountExportResponse};
+use crate::models::AppConfig;
 use crate::modules::{account, config, logger, migration, proxy_db, token_stats};
 use crate::proxy::TokenManager;
 use axum::{
@@ -18,7 +17,7 @@ use std::sync::OnceLock;
 use tokio::sync::oneshot;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error};
+use tracing::{debug, info, error};
 
 // [FIX] 全局待重新加载账号队列
 // 当 update_account_quota 更新 protected_models 后，将账号 ID 加入此队列
@@ -135,7 +134,6 @@ struct AccountListResponse {
     current_account_id: Option<String>,
 }
 
-use crate::models::{AccountExportItem, AccountExportResponse};
 fn to_account_response(
     account: &crate::models::account::Account,
     current_id: &Option<String>,
@@ -1331,7 +1329,7 @@ async fn admin_set_preferred_account(
 }
 
 async fn admin_fetch_zai_models(
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
     Json(payload): Json<serde_json::Value>, // 复用前端传来的参数
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     // 这里简单实现，如果需要更复杂的抓取逻辑，可以调用 zai 模块
@@ -2626,22 +2624,16 @@ async fn admin_prepare_oauth_url_web(
     let state_str = uuid::Uuid::new_v4().to_string();
 
     // 初始化授权流状态，以及后台处理器
-    let (auth_url, mut code_rx) = crate::modules::oauth_server::prepare_oauth_flow_manually(
-        redirect_uri.clone(),
-        state_str.clone(),
-    )
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse { error: e }),
-        )
-    })?;
+    let state_for_oauth = state.clone();
+    let (auth_url, code_rx) = crate::modules::oauth_server::prepare_oauth_flow_manually(&state_for_oauth.integration.app_handle()?)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
 
     // 启动后台任务处理回调/手动提交的代码
     let token_manager = state.token_manager.clone();
     let redirect_uri_clone = redirect_uri.clone();
     tokio::spawn(async move {
-        while let Some(res) = code_rx.recv().await {
+        if let Ok(res) = code_rx.await {
             match res {
                 Ok(code) => {
                     crate::modules::logger::log_info(
@@ -2695,7 +2687,7 @@ async fn admin_prepare_oauth_url_web(
                 }
             }
         }
-        crate::modules::logger::log_info("Background OAuth flow channel closed");
+        crate::modules::logger::log_info("Background OAuth flow finished");
     });
 
     Ok(Json(serde_json::json!({

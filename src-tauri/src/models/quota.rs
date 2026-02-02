@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use chrono;
 
 /// 模型配额信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,6 +19,14 @@ pub struct QuotaData {
     /// 订阅等级 (FREE/PRO/ULTRA)
     #[serde(default)]
     pub subscription_tier: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefreshStats {
+    pub total: usize,
+    pub success: usize,
+    pub failed: usize,
+    pub details: Vec<String>,
 }
 
 impl QuotaData {

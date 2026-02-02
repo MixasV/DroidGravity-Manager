@@ -35,3 +35,9 @@ pub fn create_client_with_proxy(
 
     builder.build().unwrap_or_else(|_| Client::new())
 }
+
+/// 获取全局默认 HTTP 客户端
+pub fn get_client() -> Client {
+    // 默认 300 秒超时
+    create_client(300)
+}

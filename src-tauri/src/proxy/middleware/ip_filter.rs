@@ -3,7 +3,6 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
     http::StatusCode,
-    body::Body,
 };
 use crate::proxy::server::AppState;
 use crate::modules::security_db;

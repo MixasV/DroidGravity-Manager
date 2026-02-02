@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use chrono;
 
 use crate::proxy::rate_limit::RateLimitTracker;
 use crate::proxy::sticky_config::StickySessionConfig;
@@ -33,11 +34,11 @@ pub struct TokenManager {
     last_used_account: Arc<tokio::sync::Mutex<Option<(String, std::time::Instant)>>>,
     data_dir: PathBuf,
     rate_limit_tracker: Arc<RateLimitTracker>, // 新增: 限流跟踪器
-    sticky_config: Arc<tokio::sync::RwLock<StickySessionConfig>>, // 新增：调度配置
+    sticky_config: Arc<parking_lot::RwLock<StickySessionConfig>>, // 新增：调度配置
     session_accounts: Arc<DashMap<String, String>>, // 新增：会话与账号映射 (SessionID -> AccountID)
-    preferred_account_id: Arc<tokio::sync::RwLock<Option<String>>>, // [FIX #820] 优先使用的账号ID（固定账号模式）
+    preferred_account_id: Arc<parking_lot::RwLock<Option<String>>>, // [FIX #820] 优先使用的账号ID（固定账号模式）
     health_scores: Arc<DashMap<String, f32>>,                       // account_id -> health_score
-    circuit_breaker_config: Arc<tokio::sync::RwLock<crate::models::CircuitBreakerConfig>>, // [NEW] 熔断配置缓存
+    circuit_breaker_config: Arc<parking_lot::RwLock<crate::models::CircuitBreakerConfig>>, // [NEW] 熔断配置缓存
 }
 
 impl TokenManager {
@@ -49,11 +50,11 @@ impl TokenManager {
             last_used_account: Arc::new(tokio::sync::Mutex::new(None)),
             data_dir,
             rate_limit_tracker: Arc::new(RateLimitTracker::new()),
-            sticky_config: Arc::new(tokio::sync::RwLock::new(StickySessionConfig::default())),
+            sticky_config: Arc::new(parking_lot::RwLock::new(StickySessionConfig::default())),
             session_accounts: Arc::new(DashMap::new()),
-            preferred_account_id: Arc::new(tokio::sync::RwLock::new(None)), // [FIX #820]
+            preferred_account_id: Arc::new(parking_lot::RwLock::new(None)), // [FIX #820]
             health_scores: Arc::new(DashMap::new()),
-            circuit_breaker_config: Arc::new(tokio::sync::RwLock::new(
+            circuit_breaker_config: Arc::new(parking_lot::RwLock::new(
                 crate::models::CircuitBreakerConfig::default(),
             )),
         }
@@ -279,7 +280,7 @@ impl TokenManager {
             return Ok(None);
         }
 
-        let account_id = account["id"].as_str().ok_or("缺少 id 字段")?.to_string();
+        let _account_id = account["id"].as_str().ok_or("缺少 id 字段")?.to_string();
 
         let account_id = account["id"].as_str()
             .ok_or("缺少 id 字段")?
@@ -419,8 +420,7 @@ impl TokenManager {
             let name = model.get("name").and_then(|v| v.as_str()).unwrap_or("");
             // [FIX] 先归一化模型名，再检查是否在监控列表中
             // 这样 claude-opus-4-5-thinking 会被归一化为 claude-sonnet-4-5 进行匹配
-            let standard_id = crate::proxy::common::model_mapping::normalize_to_standard_id(name)
-                .unwrap_or_else(|| name.to_string());
+            let standard_id = crate::proxy::common::model_mapping::normalize_to_standard_id(name);
 
             if !config.monitored_models.iter().any(|m| m == &standard_id) {
                 continue;
@@ -761,7 +761,7 @@ impl TokenManager {
         );
 
         // 0. 读取当前调度配置
-        let scheduling = self.sticky_config.read().await.clone();
+        let scheduling = self.sticky_config.read().clone();
         use crate::proxy::sticky_config::SchedulingMode;
 
         // 【新增】检查配额保护是否启用（如果关闭，则忽略 protected_models 检查）
@@ -770,15 +770,14 @@ impl TokenManager {
             .unwrap_or(false);
 
         // ===== [FIX #820] 固定账号模式：优先使用指定账号 =====
-        let preferred_id = self.preferred_account_id.read().await.clone();
+        let preferred_id = self.preferred_account_id.read().clone();
         if let Some(ref pref_id) = preferred_id {
             // 查找优先账号
             if let Some(preferred_token) = tokens_snapshot.iter().find(|t| &t.account_id == pref_id)
             {
                 // 检查账号是否可用（未限流、未被配额保护）
                 let normalized_target =
-                    crate::proxy::common::model_mapping::normalize_to_standard_id(target_model)
-                        .unwrap_or_else(|| target_model.to_string());
+                    crate::proxy::common::model_mapping::normalize_to_standard_id(target_model);
 
                 let is_rate_limited = self
                     .is_rate_limited(&preferred_token.account_id, Some(&normalized_target))
@@ -877,8 +876,7 @@ impl TokenManager {
             let mut target_token: Option<ProxyToken> = None;
 
             // 归一化目标模型名为标准 ID，用于配额保护检查
-            let normalized_target = crate::proxy::common::model_mapping::normalize_to_standard_id(target_model)
-                .unwrap_or_else(|| target_model.to_string());
+            let normalized_target = crate::proxy::common::model_mapping::normalize_to_standard_id(target_model);
 
             // 模式 A: 粘性会话处理 (CacheFirst 或 Balance 且有 session_id)
             if !rotate
@@ -1435,7 +1433,7 @@ impl TokenManager {
         error_body: &str,
     ) {
         // [NEW] 检查熔断是否启用 (使用内存缓存，极快)
-        let config = self.circuit_breaker_config.read().await.clone();
+        let config = self.circuit_breaker_config.read().clone();
         if !config.enabled {
             return;
         }
@@ -1456,7 +1454,7 @@ impl TokenManager {
     /// 检查账号是否在限流中 (支持模型级)
     pub async fn is_rate_limited(&self, account_id: &str, model: Option<&str>) -> bool {
         // [NEW] 检查熔断是否启用
-        let config = self.circuit_breaker_config.read().await;
+        let config = self.circuit_breaker_config.read();
         if !config.enabled {
             return false;
         }
@@ -1465,8 +1463,8 @@ impl TokenManager {
 
     /// [NEW] 检查账号是否在限流中 (同步版本，仅用于 Iterator)
     pub fn is_rate_limited_sync(&self, account_id: &str, model: Option<&str>) -> bool {
-        // 同步版本无法读取 async RwLock，这里使用 blocking_read
-        let config = self.circuit_breaker_config.blocking_read();
+        // 同步版本读取 parking_lot RwLock 没问题
+        let config = self.circuit_breaker_config.read();
         if !config.enabled {
             return false;
         }
@@ -1722,7 +1720,7 @@ impl TokenManager {
         model: Option<&str>, // 🆕 新增模型参数
     ) {
         // [NEW] 检查熔断是否启用
-        let config = self.circuit_breaker_config.read().await.clone();
+        let config = self.circuit_breaker_config.read().clone();
         if !config.enabled {
             return;
         }
@@ -1812,26 +1810,26 @@ impl TokenManager {
 
     /// 获取当前调度配置
     pub async fn get_sticky_config(&self) -> StickySessionConfig {
-        self.sticky_config.read().await.clone()
+        self.sticky_config.read().clone()
     }
 
     /// 更新调度配置
     pub async fn update_sticky_config(&self, new_config: StickySessionConfig) {
-        let mut config = self.sticky_config.write().await;
+        let mut config = self.sticky_config.write();
         *config = new_config;
         tracing::debug!("Scheduling configuration updated: {:?}", *config);
     }
 
     /// [NEW] 更新熔断器配置
     pub async fn update_circuit_breaker_config(&self, config: crate::models::CircuitBreakerConfig) {
-        let mut lock = self.circuit_breaker_config.write().await;
+        let mut lock = self.circuit_breaker_config.write();
         *lock = config;
         tracing::debug!("Circuit breaker configuration updated");
     }
 
     /// [NEW] 获取熔断器配置
     pub async fn get_circuit_breaker_config(&self) -> crate::models::CircuitBreakerConfig {
-        self.circuit_breaker_config.read().await.clone()
+        self.circuit_breaker_config.read().clone()
     }
 
     /// 清除特定会话的粘性映射
@@ -1850,7 +1848,7 @@ impl TokenManager {
     /// 设置优先使用的账号ID（固定账号模式）
     /// 传入 Some(account_id) 启用固定账号模式，传入 None 恢复轮询模式
     pub async fn set_preferred_account(&self, account_id: Option<String>) {
-        let mut preferred = self.preferred_account_id.write().await;
+        let mut preferred = self.preferred_account_id.write();
         if let Some(ref id) = account_id {
             tracing::info!("🔒 [FIX #820] Fixed account mode enabled: {}", id);
         } else {
@@ -1861,7 +1859,7 @@ impl TokenManager {
 
     /// 获取当前优先使用的账号ID
     pub async fn get_preferred_account(&self) -> Option<String> {
-        self.preferred_account_id.read().await.clone()
+        self.preferred_account_id.read().clone()
     }
 
     /// 使用 Authorization Code 交换 Refresh Token (Web OAuth)
@@ -1876,7 +1874,7 @@ impl TokenManager {
 
     /// 获取 OAuth URL (支持自定义 Redirect URI)
     pub fn get_oauth_url_with_redirect(&self, redirect_uri: &str, state: &str) -> String {
-        crate::modules::oauth::get_auth_url(redirect_uri, state)
+        crate::modules::oauth::get_auth_url(redirect_uri, Some(state))
     }
 
     /// 获取用户信息 (Email 等)
@@ -2094,6 +2092,8 @@ mod tests {
             protected_models: HashSet::new(),
             health_score,
             reset_time,
+            validation_blocked: false,
+            validation_blocked_until: 0,
         }
     }
 

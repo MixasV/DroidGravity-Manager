@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 /// 别名，用于兼容旧代码
-pub fn fix_tool_call_args(_value: &mut serde_json::Value, _schema: serde_json::Value) {
+pub fn fix_tool_call_args(_value: &mut serde_json::Value, _schema: &serde_json::Value) {
     // 占位实现，实际逻辑可能需要更复杂的参数修复
 }
 

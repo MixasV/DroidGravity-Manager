@@ -17,7 +17,7 @@ use crate::proxy::mappers::claude::{
     transform_claude_request_in, transform_response, create_claude_sse_stream, ClaudeRequest,
     filter_invalid_thinking_blocks_with_family, close_tool_loop_for_thinking,
     clean_cache_control_from_messages, merge_consecutive_messages,
-    models::{Message, MessageContent, ContentBlock},
+    models::{Message, MessageContent},
 };
 use crate::proxy::server::AppState;
 use crate::proxy::mappers::context_manager::ContextManager;
@@ -26,6 +26,7 @@ use crate::proxy::debug_logger;
 use axum::http::HeaderMap;
 use std::sync::{atomic::Ordering, Arc};
 use tokio_util::sync::CancellationToken;
+use rand;
 
 const MAX_RETRY_ATTEMPTS: usize = 3;
 
@@ -124,7 +125,9 @@ pub async fn handle_messages(
     tracing::debug!("handle_messages called. Body JSON len: {}", body.to_string().len());
     
     // 生成随机 Trace ID 用户追踪
-    let trace_id: String = rand::Rng::sample_iter(rand::thread_rng(), &rand::distributions::Alphanumeric)
+    use rand::Rng;
+    let trace_id: String = rand::thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
         .take(6)
         .map(char::from)
         .collect::<String>().to_lowercase();
@@ -165,8 +168,7 @@ pub async fn handle_messages(
     }
 
     // [Issue #703 Fix] 智能兜底判断:需要归一化模型名用于配额保护检查
-    let normalized_model = crate::proxy::common::model_mapping::normalize_to_standard_id(&request.model)
-        .unwrap_or_else(|| request.model.clone());
+    let normalized_model = crate::proxy::common::model_mapping::normalize_to_standard_id(&request.model);
 
     let use_zai = if !zai_enabled {
         false

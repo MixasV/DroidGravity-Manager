@@ -71,6 +71,53 @@ pub async fn auth_middleware(
     }
 }
 
+/// 管理端 API 认证中间件 (强制 API Key)
+pub async fn admin_auth_middleware(
+    State(security): State<Arc<RwLock<ProxySecurityConfig>>>,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let method = request.method().clone();
+    let path = request.uri().path().to_string();
+
+    // 过滤心跳日志
+    if path != "/health" {
+        tracing::debug!("Admin Request: {} {}", method, path);
+    }
+
+    // Allow CORS preflight.
+    if method == axum::http::Method::OPTIONS {
+        return Ok(next.run(request).await);
+    }
+
+    let security = security.read().await.clone();
+
+    // 管理端始终强制要求 API Key
+    let api_key = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer ").or(Some(s)))
+        .or_else(|| {
+            request
+                .headers()
+                .get("x-api-key")
+                .and_then(|h| h.to_str().ok())
+        });
+
+    if security.api_key.is_empty() {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let authorized = api_key.map(|k| k == security.api_key).unwrap_or(false);
+
+    if authorized {
+        Ok(next.run(request).await)
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // 移除未使用的 use super::*;

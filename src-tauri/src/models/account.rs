@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use chrono;
 use super::{token::TokenData, quota::QuotaData};
 
 /// 账号数据结构
@@ -113,6 +114,15 @@ pub struct DeviceProfile {
     pub mac_machine_id: String,
     pub dev_device_id: String,
     pub sqm_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceProfileVersion {
+    pub id: String,
+    pub created_at: i64,
+    pub label: String,
+    pub profile: DeviceProfile,
+    pub is_current: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

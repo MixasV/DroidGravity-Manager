@@ -3,8 +3,11 @@ use std::path::PathBuf;
 use serde_json;
 use uuid::Uuid;
 use serde::Serialize;
+use chrono;
+use dirs;
+use tracing;
 
-use crate::models::{Account, AccountIndex, AccountSummary, TokenData, QuotaData, DeviceProfile, DeviceProfileVersion,};
+use crate::models::{Account, AccountIndex, AccountSummary, TokenData, QuotaData, DeviceProfile, DeviceProfileVersion, AccountExportItem, AccountExportResponse, RefreshStats};
 use crate::modules;
 use once_cell::sync::Lazy;
 use std::sync::Mutex;
@@ -359,9 +362,7 @@ pub fn reorder_accounts(account_ids: &[String]) -> Result<(), String> {
 }
 
 /// 切换当前账号
-pub async fn switch_account(account_id: &str, _integration: &crate::modules::integration::SystemManager) -> Result<(), String> {
-    use crate::modules::{oauth, process, db, device};
-    
+pub async fn switch_account(account_id: &str, integration: &crate::modules::integration::SystemManager) -> Result<(), String> {
     let index = {
         let _lock = ACCOUNT_INDEX_LOCK.lock().map_err(|e| format!("获取锁失败: {}", e))?;
         load_account_index()?
@@ -376,7 +377,7 @@ pub async fn switch_account(account_id: &str, _integration: &crate::modules::int
     crate::modules::logger::log_info(&format!("正在切换到账号: {} (ID: {})", account.email, account.id));
     
     // 2. 确保 Token 有效（自动刷新）
-    let fresh_token = oauth::ensure_fresh_token(&account.token).await
+    let fresh_token = crate::modules::oauth::ensure_fresh_token(&account.token).await
         .map_err(|e| format!("Token 刷新失败: {}", e))?;
         
     // 如果 Token 更新了，保存回账号文件
@@ -385,56 +386,10 @@ pub async fn switch_account(account_id: &str, _integration: &crate::modules::int
         save_account(&account)?;
     }
     
-    // 3. 关闭 Antigravity (增加超时时间到 20 秒)
-    if process::is_antigravity_running() {
-        process::close_antigravity(20)?;
-    }
+    // 3. 执行系统层切换操作 (通过 SystemManager)
+    integration.on_account_switch(&account).await?;
 
-    // 4. 写入设备指纹（缺失则生成并绑定），仅在切换时改 storage
-    let storage_path = device::get_storage_path()?;
-    let profile_to_apply = {
-        // 优先账户绑定，其次全局原始，否则现采集/生成
-        if let Some(p) = account.device_profile.clone() {
-            p
-        } else if let Some(global) = device::load_global_original() {
-            global
-        } else {
-            // 捕获当前 storage 为原始指纹
-            let current =
-                device::read_profile(&storage_path).unwrap_or_else(|_| device::generate_profile());
-            let _ = device::save_global_original(&current);
-            current
-        }
-    };
-    crate::modules::logger::log_info(&format!(
-        "写入设备指纹到 storage.json: machineId={}, macMachineId={}, devDeviceId={}, sqmId={}",
-        profile_to_apply.machine_id,
-        profile_to_apply.mac_machine_id,
-        profile_to_apply.dev_device_id,
-        profile_to_apply.sqm_id
-    ));
-    device::write_profile(&storage_path, &profile_to_apply)?;
-
-    // 5. 获取数据库路径并备份
-    let db_path = db::get_db_path()?;
-    if db_path.exists() {
-        let backup_path = db_path.with_extension("vscdb.backup");
-        fs::copy(&db_path, &backup_path)
-            .map_err(|e| format!("备份数据库失败: {}", e))?;
-    } else {
-        crate::modules::logger::log_info("数据库不存在，跳过备份");
-    }
-
-    // 6. 注入 Token
-    crate::modules::logger::log_info("正在注入 Token 到数据库...");
-    db::inject_token(
-        &db_path,
-        &account.token.access_token,
-        &account.token.refresh_token,
-        account.token.expiry_timestamp,
-    )?;
-
-    // 7. 更新工具内部状态
+    // 4. 更新工具内部状态
     {
         let _lock = ACCOUNT_INDEX_LOCK.lock().map_err(|e| format!("获取锁失败: {}", e))?;
         let mut index = load_account_index()?;
@@ -445,8 +400,6 @@ pub async fn switch_account(account_id: &str, _integration: &crate::modules::int
     account.update_last_used();
     save_account(&account)?;
 
-    // 8. 重启 Antigravity
-    process::start_antigravity()?;
     crate::modules::logger::log_info(&format!("账号切换完成: {}", account.email));
 
     Ok(())
@@ -672,6 +625,99 @@ pub fn export_accounts() -> Result<Vec<(String, String)>, String> {
     }
     
     Ok(exports)
+}
+
+/// 批量刷新所有账号配额
+pub async fn refresh_all_quotas() -> Result<RefreshStats, String> {
+    use futures::future::join_all;
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+
+    const MAX_CONCURRENT: usize = 5;
+    let start = std::time::Instant::now();
+
+    crate::modules::logger::log_info(&format!(
+        "开始批量刷新所有账号配额 (并发模式, 最大并发: {})",
+        MAX_CONCURRENT
+    ));
+    let accounts = list_accounts()?;
+
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));
+
+    let tasks: Vec<_> = accounts
+        .into_iter()
+        .filter(|account| {
+            if account.disabled {
+                crate::modules::logger::log_info(&format!("  - Skipping {} (Disabled)", account.email));
+                return false;
+            }
+            if let Some(ref q) = account.quota {
+                if q.is_forbidden {
+                    crate::modules::logger::log_info(&format!("  - Skipping {} (Forbidden)", account.email));
+                    return false;
+                }
+            }
+            true
+        })
+        .map(|mut account| {
+            let email = account.email.clone();
+            let account_id = account.id.clone();
+            let permit = semaphore.clone();
+            async move {
+                let _guard = permit.acquire().await.unwrap();
+                crate::modules::logger::log_info(&format!("  - Processing {}", email));
+                match fetch_quota_with_retry(&mut account).await {
+                    Ok(quota) => {
+                        if let Err(e) = update_account_quota(&account_id, quota) {
+                            let msg = format!("Account {}: Save quota failed - {}", email, e);
+                            crate::modules::logger::log_error(&msg);
+                            Err(msg)
+                        } else {
+                            crate::modules::logger::log_info(&format!("    ✅ {} Success", email));
+                            Ok(())
+                        }
+                    }
+                    Err(e) => {
+                        let msg = format!("Account {}: Fetch quota failed - {}", email, e);
+                        crate::modules::logger::log_error(&msg);
+                        Err(msg)
+                    }
+                }
+            }
+        })
+        .collect();
+
+    let total = tasks.len();
+    let results = join_all(tasks).await;
+
+    let mut success = 0;
+    let mut failed = 0;
+    let mut details = Vec::new();
+
+    for result in results {
+        match result {
+            Ok(()) => success += 1,
+            Err(msg) => {
+                failed += 1;
+                details.push(msg);
+            }
+        }
+    }
+
+    let elapsed = start.elapsed();
+    crate::modules::logger::log_info(&format!(
+        "批量刷新完成: {} 成功, {} 失败, 耗时: {}ms",
+        success,
+        failed,
+        elapsed.as_millis()
+    ));
+
+    Ok(RefreshStats {
+        total,
+        success,
+        failed,
+        details,
+    })
 }
 
 /// 带有重试机制的配额查询 (从 commands 移动到 modules 以便共享)

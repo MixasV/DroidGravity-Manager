@@ -6,10 +6,13 @@ use std::sync::{Mutex, OnceLock};
 use tauri::Url;
 use crate::modules::oauth;
 
+use std::sync::Arc;
+
 struct OAuthFlowState {
     auth_url: String,
     redirect_uri: String,
     cancel_tx: watch::Sender<bool>,
+    code_tx: Arc<tokio::sync::Mutex<Option<oneshot::Sender<Result<String, String>>>>>,
     code_rx: Option<oneshot::Receiver<Result<String, String>>>,
 }
 
@@ -207,6 +210,7 @@ async fn ensure_oauth_flow_prepared(app_handle: &tauri::AppHandle) -> Result<Str
             auth_url: auth_url.clone(),
             redirect_uri,
             cancel_tx,
+            code_tx: code_tx.clone(),
             code_rx: Some(code_rx),
         });
     }
@@ -307,4 +311,36 @@ pub async fn complete_oauth_flow(app_handle: tauri::AppHandle) -> Result<oauth::
     }
 
     oauth::exchange_code(&code, &redirect_uri).await
+}
+
+/// 提交手动获取的 OAuth Code (用于 Web/CLI 混合流程)
+pub async fn submit_oauth_code(code: String, _state: Option<String>) -> Result<(), String> {
+    let tx_opt = {
+        if let Ok(mut lock) = get_oauth_flow_state().lock() {
+            lock.as_mut().map(|state| state.code_tx.clone())
+        } else {
+            None
+        }
+    };
+
+    if let Some(tx) = tx_opt {
+        if let Some(sender) = tx.lock().await.take() {
+            let _ = sender.send(Ok(code));
+            return Ok(());
+        }
+    }
+    Err("没有正在进行的 OAuth 流程".to_string())
+}
+
+/// 准备手动 OAuth 流程
+pub async fn prepare_oauth_flow_manually(app_handle: &tauri::AppHandle) -> Result<(String, oneshot::Receiver<Result<String, String>>), String> {
+    let auth_url = ensure_oauth_flow_prepared(app_handle).await?;
+    
+    let rx = {
+        let mut lock = get_oauth_flow_state().lock().map_err(|_| "OAuth 状态锁被污染".to_string())?;
+        let Some(state) = lock.as_mut() else { return Err("OAuth 状态不存在".to_string()); };
+        state.code_rx.take().ok_or_else(|| "OAuth 授权已在进行中".to_string())?
+    };
+
+    Ok((auth_url, rx))
 }

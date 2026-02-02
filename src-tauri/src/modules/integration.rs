@@ -96,6 +96,19 @@ pub enum SystemManager {
 }
 
 impl SystemManager {
+    /// 创建一个新的 SystemManager，默认使用 Headless 模式
+    pub fn new() -> Self {
+        SystemManager::Headless
+    }
+
+    /// 获取 Tauri AppHandle（如果是 Desktop 模式）
+    pub fn app_handle(&self) -> Result<tauri::AppHandle, String> {
+        match self {
+            SystemManager::Desktop(h) => Ok(h.clone()),
+            SystemManager::Headless => Err("Headless 模式没有 AppHandle".to_string()),
+        }
+    }
+
     pub async fn on_account_switch(&self, account: &Account) -> Result<(), String> {
         match self {
             SystemManager::Desktop(handle) => {

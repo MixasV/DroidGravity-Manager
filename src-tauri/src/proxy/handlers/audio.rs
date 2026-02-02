@@ -109,10 +109,10 @@ pub async fn handle_audio_transcription(
 
     // 7. 包装请求为 v1internal 格式
     let wrapped_body = json!({
-        "project": project_id,
+        "project": project_id.clone(),
         "requestId": format!("audio-{}", Uuid::new_v4()),
         "request": gemini_request,
-        "model": model,
+        "model": model.clone(),
         "userAgent": "antigravity",
         "requestType": "text"
     });
@@ -127,7 +127,7 @@ pub async fn handle_audio_transcription(
     let status = response.status();
     if !status.is_success() {
         let status_code = status.as_u16();
-        let retry_after = response.headers().get("Retry-After").and_then(|h| h.to_str().ok());
+        let retry_after = response.headers().get("Retry-After").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
         let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
         
         // 标记限流状态
@@ -136,7 +136,7 @@ pub async fn handle_audio_transcription(
                 .mark_rate_limited_async(
                     &email,
                     status_code,
-                    retry_after,
+                    retry_after.as_deref(),
                     &error_text,
                     Some(&model),
                 )

@@ -250,11 +250,10 @@ pub async fn update_security_config(
 #[tauri::command]
 pub async fn get_ip_token_stats(
     limit: Option<usize>,
-    hours: Option<i64>
+    _hours: Option<i64>
 ) -> Result<Vec<crate::modules::proxy_db::IpTokenStats>, String> {
     crate::modules::proxy_db::get_token_usage_by_ip(
-        limit.unwrap_or(100),
-        hours.unwrap_or(720)
+        limit.unwrap_or(100)
     )
 }
 

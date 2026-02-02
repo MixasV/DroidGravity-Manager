@@ -112,7 +112,12 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
                              };
                              
                              // 2. 切换
-                             if let Ok(_) = modules::switch_account(&next_account.id).await {
+                             let state = app_handle.state::<crate::commands::proxy::ProxyServiceState>();
+                             let integration = match &*state.instance.read().await {
+                                 Some(instance) => instance.axum_server.integration.clone(),
+                                 None => crate::modules::integration::SystemManager::new(),
+                             };
+                             if let Ok(_) = modules::switch_account(&next_account.id, &integration).await {
                                  // 3. 通知前端
                                  let _ = app_handle.emit("tray://account-switched", next_account.id.clone());
                                  // 4. 更新托盘

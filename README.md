@@ -4,9 +4,16 @@
 > **DO NOT SYNC WITH UPSTREAM (lbjlaq/Antigravity-Manager)!**
 > This is a separate standalone project. Syncing with upstream will overwrite Droid-specific changes and localized branding.
 
-**Version 1.1.0**
+**Version 1.1.4**
 
 A fork of [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager) with **Factory Droid** support for seamless integration with Google Gemini and Anthropic Claude models.
+
+## 🌟 What's New in v1.1.4
+
+- **Protocol Synchronization**: Harmonized rate limiting and error handling across all protocols (OpenAI, Claude, Gemini, and Audio).
+- **Fine-Grained Rate Limiting**: Implemented async-aware rate limit tracking with support for specific model weights.
+- **Enhanced Monitoring**: Updated database schemas and models to support better log filtering and detailed request metadata.
+- **Improved Stability**: Resolved unresolved names and ensured thread-safe token management during high-concurrency requests.
 
 ## 🌟 What's New in v1.1.0
 
@@ -194,6 +201,14 @@ Default port is `8045`. To change:
 ---
 
 ## 📝 Changelog
+
+### Version 1.1.4 (2026-02-02)
+
+- ⚡ Synchronized rate limiting logic across Gemini, Claude, and OpenAI handlers.
+- 🛠️ Fixed missing rate limit marking in Audio transcription handler.
+- 📊 Enhanced proxy database with support for client IP tracking and token reasoning metadata.
+- 🔄 Optimized `TokenManager` to handle concurrent account reloads more efficiently.
+- 🐛 Resolved various "unresolved name" errors and improved type safety in handlers.
 
 ### Version 1.1.0 (2026-01-23)
 

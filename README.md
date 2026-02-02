@@ -1,5 +1,9 @@
 # DroidGravity Manager 🚀
 
+> [!CAUTION]
+> **DO NOT SYNC WITH UPSTREAM (lbjlaq/Antigravity-Manager)!**
+> This is a separate standalone project. Syncing with upstream will overwrite Droid-specific changes and localized branding.
+
 **Version 1.1.0**
 
 A fork of [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager) with **Factory Droid** support for seamless integration with Google Gemini and Anthropic Claude models.

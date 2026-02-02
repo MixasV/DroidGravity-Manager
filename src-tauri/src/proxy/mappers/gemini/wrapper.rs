@@ -20,18 +20,24 @@ pub fn wrap_request(body: &Value, project_id: &str, mapped_model: &str, session_
     crate::proxy::mappers::common_utils::deep_clean_undefined(&mut inner_request);
 
     // [FIX #765] Inject thought_signature into functionCall parts
+    // [CRITICAL FIX] Gemini API требует либо реальную подпись, либо полное отсутствие поля
+    // Не принимает sentinel значения или пустые строки
     if let Some(s_id) = session_id {
         if let Some(contents) = inner_request.get_mut("contents").and_then(|c| c.as_array_mut()) {
             for content in contents {
                 if let Some(parts) = content.get_mut("parts").and_then(|p| p.as_array_mut()) {
                     for part in parts {
                         if part.get("functionCall").is_some() {
-                            // Only inject if it doesn't already have one
-                            if part.get("thoughtSignature").is_none() {
+                            if let Some(obj) = part.as_object_mut() {
+                                // Проверяем наличие подписи в кэше
                                 if let Some(sig) = crate::proxy::SignatureCache::global().get_session_signature(s_id) {
-                                    if let Some(obj) = part.as_object_mut() {
-                                        obj.insert("thoughtSignature".to_string(), json!(sig));
-                                        tracing::debug!("[Gemini-Wrap] Injected signature (len: {}) for session: {}", sig.len(), s_id);
+                                    // Есть реальная подпись - добавляем/обновляем
+                                    obj.insert("thoughtSignature".to_string(), json!(sig));
+                                    tracing::debug!("[Gemini-Wrap] Injected signature (len: {}) for session: {}", sig.len(), s_id);
+                                } else {
+                                    // Нет подписи в кэше - удаляем поле полностью
+                                    if obj.remove("thoughtSignature").is_some() {
+                                        tracing::debug!("[Gemini-Wrap] Removed empty/sentinel thoughtSignature field");
                                     }
                                 }
                             }

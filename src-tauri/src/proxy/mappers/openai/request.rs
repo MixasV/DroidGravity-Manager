@@ -192,12 +192,12 @@ pub fn transform_openai_request(
                 });
                 
                 // [NEW] 优先使用全局存储的思维签名 (如果可用)
+                // [FIX] Gemini API 不接受 skip_thought_signature_validator sentinel
+                // 只有在有真实签名时才添加 thoughtSignature 字段
                 if let Some(ref sig) = global_thought_sig {
                     thought_part["thoughtSignature"] = json!(sig);
-                } else if !mapped_model.starts_with("projects/") && mapped_model.contains("gemini") {
-                    // [FIX] 仅针对 Gemini 思维模型注入跳过标签, Claude 不识别此标签
-                    thought_part["thoughtSignature"] = json!("skip_thought_signature_validator");
                 }
+                // Gemini: 如果没有签名 - 不添加 thoughtSignature 字段
                 
                 parts.push(thought_part);
             }
@@ -316,13 +316,17 @@ pub fn transform_openai_request(
                     crate::proxy::common::json_schema::clean_json_schema(&mut func_call_part);
 
                     // [修复] 为该消息内的所有工具调用注入 thoughtSignature
+                    // [FIX] Gemini API 不接受 skip_thought_signature_validator sentinel
+                    // 只在有真实签名时才添加，否则不添加字段
                     if let Some(ref sig) = global_thought_sig {
                         func_call_part["thoughtSignature"] = json!(sig);
-                    } else if is_thinking_model && !mapped_model.starts_with("projects/") {
-                        // [NEW] Handle missing signature for Gemini thinking models
-                        tracing::debug!("[OpenAI-Signature] Adding GEMINI_SKIP_SIGNATURE for tool_use: {}", tc.id);
+                        tracing::debug!("[OpenAI-Signature] Using cached signature for tool_use: {}", tc.id);
+                    } else if is_thinking_model && mapped_model.contains("claude") {
+                        // 仅 Claude 模型使用 sentinel，Gemini 不支持
+                        tracing::debug!("[OpenAI-Signature] Adding CLAUDE_SKIP_SIGNATURE for tool_use: {}", tc.id);
                         func_call_part["thoughtSignature"] = json!("skip_thought_signature_validator");
                     }
+                    // Gemini: 如果没有签名 - 不添加 thoughtSignature 字段
 
                     parts.push(func_call_part);
                 }

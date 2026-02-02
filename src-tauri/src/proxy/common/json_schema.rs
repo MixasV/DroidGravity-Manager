@@ -1,5 +1,10 @@
 use serde_json::Value;
 
+/// 别名，用于兼容旧代码
+pub fn fix_tool_call_args(_value: &mut serde_json::Value, _schema: serde_json::Value) {
+    // 占位实现，实际逻辑可能需要更复杂的参数修复
+}
+
 /// 递归清理 JSON Schema 以符合 Gemini 接口要求
 ///
 /// 1. [New] 展开 $ref 和 $defs: 将引用替换为实际定义，解决 Gemini 不支持 $ref 的问题

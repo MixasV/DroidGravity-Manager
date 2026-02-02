@@ -111,7 +111,7 @@ async fn ensure_oauth_flow_prepared(app_handle: &tauri::AppHandle) -> Result<Str
         format!("http://[::1]:{}/oauth-callback", port)
     };
 
-    let auth_url = oauth::get_auth_url(&redirect_uri);
+    let auth_url = oauth::get_auth_url(&redirect_uri, None);
 
     // 取消信号（支持多消费者）
     let (cancel_tx, cancel_rx) = watch::channel(false);

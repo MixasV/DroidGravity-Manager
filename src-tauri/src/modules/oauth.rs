@@ -49,7 +49,7 @@ impl UserInfo {
 
 
 /// 生成 OAuth 授权 URL
-pub fn get_auth_url(redirect_uri: &str) -> String {
+pub fn get_auth_url(redirect_uri: &str, state: Option<&str>) -> String {
     let scopes = vec![
         "https://www.googleapis.com/auth/cloud-platform",
         "https://www.googleapis.com/auth/userinfo.email",
@@ -58,15 +58,19 @@ pub fn get_auth_url(redirect_uri: &str) -> String {
         "https://www.googleapis.com/auth/experimentsandconfigs"
     ].join(" ");
 
-    let params = vec![
-        ("client_id", CLIENT_ID),
-        ("redirect_uri", redirect_uri),
-        ("response_type", "code"),
-        ("scope", &scopes),
-        ("access_type", "offline"),
-        ("prompt", "consent"),
-        ("include_granted_scopes", "true"),
+    let mut params = vec![
+        ("client_id", CLIENT_ID.to_string()),
+        ("redirect_uri", redirect_uri.to_string()),
+        ("response_type", "code".to_string()),
+        ("scope", scopes),
+        ("access_type", "offline".to_string()),
+        ("prompt", "consent".to_string()),
+        ("include_granted_scopes", "true".to_string()),
     ];
+    
+    if let Some(s) = state {
+        params.push(("state", s.to_string()));
+    }
     
     let url = url::Url::parse_with_params(AUTH_URL, &params).expect("无效的 Auth URL");
     url.to_string()

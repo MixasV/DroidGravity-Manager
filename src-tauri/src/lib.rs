@@ -40,6 +40,7 @@ pub fn run() {
                 });
         }))
         .manage(commands::proxy::ProxyServiceState::new())
+        .manage(crate::commands::cloudflared::CloudflaredState::new())
         .setup(|app| {
             info!("Setup starting...");
             modules::tray::create_tray(app.handle())?;
@@ -52,10 +53,12 @@ pub fn run() {
                 if let Ok(config) = modules::config::load_app_config() {
                     if config.proxy.auto_start {
                         let state = handle.state::<commands::proxy::ProxyServiceState>();
+                        let cf_state = handle.state::<crate::commands::cloudflared::CloudflaredState>();
                         // 尝试启动服务
                         if let Err(e) = commands::proxy::start_proxy_service(
                             config.proxy,
                             state,
+                            cf_state,
                             handle.clone(),
                         ).await {
                             error!("自动启动反代服务失败: {}", e);

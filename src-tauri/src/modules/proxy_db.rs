@@ -1,6 +1,14 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::PathBuf;
 use crate::proxy::monitor::ProxyRequestLog;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IpTokenStats {
+    pub ip: String,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub request_count: u64,
+}
 
 pub fn get_proxy_db_path() -> Result<PathBuf, String> {
     let data_dir = crate::modules::account::get_data_dir()?;
@@ -91,11 +99,15 @@ pub fn get_logs(limit: usize) -> Result<Vec<ProxyRequestLog>, String> {
             model: row.get(6)?,
             mapped_model: row.get(13).unwrap_or(None),
             account_email: row.get(12).unwrap_or(None),
+            client_ip: None,
             error: row.get(7)?,
             request_body: row.get(8).unwrap_or(None),
             response_body: row.get(9).unwrap_or(None),
             input_tokens: row.get(10).unwrap_or(None),
             output_tokens: row.get(11).unwrap_or(None),
+            cached_tokens: None,
+            reasoning_tokens: None,
+            protocol: None,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -140,4 +152,126 @@ pub fn clear_logs() -> Result<(), String> {
     let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM request_logs", []).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+pub fn get_logs_count_filtered(filter: &str, errors_only: bool) -> Result<u64, String> {
+    let db_path = get_proxy_db_path()?;
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    let mut query = "SELECT COUNT(*) FROM request_logs WHERE (url LIKE ?1 OR method LIKE ?1 OR model LIKE ?1 OR error LIKE ?1 OR account_email LIKE ?1)".to_string();
+    if errors_only {
+        query.push_str(" AND (status < 200 OR status >= 400)");
+    }
+
+    let count: u64 = conn.query_row(&query, [format!("%{}%", filter)], |row| row.get(0)).map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
+pub fn get_logs_filtered(filter: &str, errors_only: bool, limit: usize, offset: usize) -> Result<Vec<ProxyRequestLog>, String> {
+    let db_path = get_proxy_db_path()?;
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    let mut query = "SELECT id, timestamp, method, url, status, duration, model, error, request_body, response_body, input_tokens, output_tokens, account_email, mapped_model 
+                     FROM request_logs 
+                     WHERE (url LIKE ?1 OR method LIKE ?1 OR model LIKE ?1 OR error LIKE ?1 OR account_email LIKE ?1)".to_string();
+    
+    if errors_only {
+        query.push_str(" AND (status < 200 OR status >= 400)");
+    }
+    
+    query.push_str(" ORDER BY timestamp DESC LIMIT ?2 OFFSET ?3");
+
+    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+    let logs_iter = stmt.query_map(params![format!("%{}%", filter), limit, offset], |row| {
+        Ok(ProxyRequestLog {
+            id: row.get(0)?,
+            timestamp: row.get(1)?,
+            method: row.get(2)?,
+            url: row.get(3)?,
+            status: row.get(4)?,
+            duration: row.get(5)?,
+            model: row.get(6)?,
+            mapped_model: row.get(13).unwrap_or(None),
+            account_email: row.get(12).unwrap_or(None),
+            error: row.get(7)?,
+            request_body: row.get(8).unwrap_or(None),
+            response_body: row.get(9).unwrap_or(None),
+            input_tokens: row.get(10).unwrap_or(None),
+            output_tokens: row.get(11).unwrap_or(None),
+            client_ip: None, // These fields are not in DB yet but needed for struct
+            cached_tokens: None,
+            reasoning_tokens: None,
+            protocol: None,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut logs = Vec::new();
+    for log in logs_iter {
+        logs.push(log.map_err(|e| e.to_string())?);
+    }
+    Ok(logs)
+}
+
+pub fn get_logs_summary(_filter: &str, _errors_only: bool) -> Result<Vec<ProxyRequestLog>, String> {
+    // 简版实现，直接复用 get_logs_filtered
+    get_logs_filtered(_filter, _errors_only, 100, 0)
+}
+
+pub fn get_log_detail(log_id: &str) -> Result<Option<ProxyRequestLog>, String> {
+    let db_path = get_proxy_db_path()?;
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, timestamp, method, url, status, duration, model, error, request_body, response_body, input_tokens, output_tokens, account_email, mapped_model 
+         FROM request_logs WHERE id = ?1"
+    ).map_err(|e| e.to_string())?;
+
+    let log = stmt.query_row([log_id], |row| {
+        Ok(ProxyRequestLog {
+            id: row.get(0)?,
+            timestamp: row.get(1)?,
+            method: row.get(2)?,
+            url: row.get(3)?,
+            status: row.get(4)?,
+            duration: row.get(5)?,
+            model: row.get(6)?,
+            mapped_model: row.get(13).unwrap_or(None),
+            account_email: row.get(12).unwrap_or(None),
+            error: row.get(7)?,
+            request_body: row.get(8).unwrap_or(None),
+            response_body: row.get(9).unwrap_or(None),
+            input_tokens: row.get(10).unwrap_or(None),
+            output_tokens: row.get(11).unwrap_or(None),
+            client_ip: None,
+            cached_tokens: None,
+            reasoning_tokens: None,
+            protocol: None,
+        })
+    }).optional().map_err(|e| e.to_string())?;
+
+    Ok(log)
+}
+
+pub fn get_logs_count() -> Result<u64, String> {
+    let db_path = get_proxy_db_path()?;
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let count: u64 = conn.query_row("SELECT COUNT(*) FROM request_logs", [], |row| row.get(0)).map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
+pub fn get_all_logs_for_export() -> Result<Vec<ProxyRequestLog>, String> {
+    get_logs(10000)
+}
+
+pub fn get_token_usage_by_ip(_limit: usize) -> Result<Vec<IpTokenStats>, String> {
+    // 暂未实现 IP 级别的统计，返回空
+    Ok(Vec::new())
+}
+
+pub fn cleanup_old_logs(days: i64) -> Result<usize, String> {
+    let db_path = get_proxy_db_path()?;
+    let conn = Connection::open(db_path).map_err(|e| e.to_string())?;
+    let timestamp = (chrono::Utc::now() - chrono::Duration::days(days)).timestamp() * 1000;
+    let deleted = conn.execute("DELETE FROM request_logs WHERE timestamp < ?1", params![timestamp]).map_err(|e| e.to_string())?;
+    Ok(deleted)
 }

@@ -124,8 +124,25 @@ pub async fn handle_audio_transcription(
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, format!("上游请求失败: {}", e)))?;
 
-    if !response.status().is_success() {
+    let status = response.status();
+    if !status.is_success() {
+        let status_code = status.as_u16();
+        let retry_after = response.headers().get("Retry-After").and_then(|h| h.to_str().ok());
         let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        
+        // 标记限流状态
+        if status_code == 429 || status_code == 529 || status_code == 503 || status_code == 500 {
+            token_manager
+                .mark_rate_limited_async(
+                    &email,
+                    status_code,
+                    retry_after,
+                    &error_text,
+                    Some(&model),
+                )
+                .await;
+        }
+
         return Err((
             StatusCode::BAD_GATEWAY,
             format!("Gemini API 错误: {}", error_text),

@@ -209,9 +209,11 @@ pub fn start_scheduler(app_handle: Option<tauri::AppHandle>, proxy_state: crate:
                         
                         for handle in handles {
                             match handle.await {
-                                Ok((true, history_key)) => {
-                                    success += 1;
-                                    record_warmup_history(&history_key, now_ts);
+                                Ok((res, h_key)) => {
+                                    if let Ok(_) = res {
+                                        success += 1;
+                                        record_warmup_history(&h_key, now_ts);
+                                    }
                                 }
                                 _ => {}
                             }

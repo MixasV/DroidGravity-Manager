@@ -134,6 +134,7 @@ pub async fn forward_anthropic_json(
     path: &str,
     incoming_headers: &HeaderMap,
     mut body: Value,
+    _message_count: usize,
 ) -> Response {
     let zai = state.zai.read().await.clone();
     if !zai.enabled || zai.dispatch_mode == crate::proxy::ZaiDispatchMode::Off {

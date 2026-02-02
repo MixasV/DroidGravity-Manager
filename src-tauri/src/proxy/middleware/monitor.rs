@@ -101,6 +101,7 @@ pub async fn monitor_middleware(
         model,
         mapped_model,
         account_email,
+        client_ip: None,
         error: None,
         request_body: request_body_str,
         response_body: None,

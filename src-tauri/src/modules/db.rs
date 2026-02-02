@@ -68,6 +68,7 @@ pub fn inject_token(
     access_token: &str,
     refresh_token: &str,
     expiry: i64,
+    _email: &str,
 ) -> Result<String, String> {
     // 1. 打开数据库
     let conn = Connection::open(db_path).map_err(|e| format!("打开数据库失败: {}", e))?;

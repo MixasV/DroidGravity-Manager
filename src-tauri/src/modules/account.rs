@@ -359,7 +359,7 @@ pub fn reorder_accounts(account_ids: &[String]) -> Result<(), String> {
 }
 
 /// 切换当前账号
-pub async fn switch_account(account_id: &str) -> Result<(), String> {
+pub async fn switch_account(account_id: &str, _integration: &crate::modules::integration::SystemManager) -> Result<(), String> {
     use crate::modules::{oauth, process, db, device};
     
     let index = {
@@ -623,6 +623,42 @@ pub fn update_account_quota(account_id: &str, quota: QuotaData) -> Result<(), St
     let mut account = load_account(account_id)?;
     account.update_quota(quota);
     save_account(&account)
+}
+
+/// 切换账号的反代禁用状态
+pub fn toggle_proxy_status(account_id: &str, enable: bool, reason: Option<&str>) -> Result<(), String> {
+    let mut account = load_account(account_id)?;
+    
+    if enable {
+        account.proxy_disabled = false;
+        account.proxy_disabled_reason = None;
+        account.proxy_disabled_at = None;
+    } else {
+        account.proxy_disabled = true;
+        account.proxy_disabled_at = Some(chrono::Utc::now().timestamp());
+        account.proxy_disabled_reason = Some(reason.unwrap_or("用户手动禁用").to_string());
+    }
+    
+    save_account(&account)
+}
+
+/// 导出指定 ID 的账号
+pub fn export_accounts_by_ids(ids: &[String]) -> Result<AccountExportResponse, String> {
+    let mut items = Vec::new();
+    for id in ids {
+        if let Ok(account) = load_account(id) {
+            items.push(AccountExportItem {
+                email: account.email,
+                refresh_token: account.token.refresh_token,
+            });
+        }
+    }
+    Ok(AccountExportResponse { accounts: items })
+}
+
+/// 批量刷新所有账号配额的逻辑实现
+pub async fn refresh_all_quotas_logic() -> Result<RefreshStats, String> {
+    crate::commands::refresh_all_quotas().await
 }
 
 /// 导出所有账号的 refresh_token

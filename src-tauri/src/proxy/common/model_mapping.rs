@@ -55,6 +55,11 @@ static CLAUDE_TO_GEMINI: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|
     m
 });
 
+/// 别名，用于兼容旧代码
+pub fn normalize_to_standard_id(name: &str) -> String {
+    map_claude_model_to_gemini(name)
+}
+
 pub fn map_claude_model_to_gemini(input: &str) -> String {
     // 1. Check exact match in map
     if let Some(mapped) = CLAUDE_TO_GEMINI.get(input) {

@@ -30,9 +30,12 @@ pub struct Account {
     /// Optional human-readable reason for proxy disabling.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_disabled_reason: Option<String>,
-    /// Unix timestamp when the proxy was disabled.
+    /// Unix timestamp when the the proxy was disabled.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_disabled_at: Option<i64>,
+    /// Protected models for this account
+    #[serde(default)]
+    pub protected_models: std::collections::HashSet<String>,
     pub created_at: i64,
     pub last_used: i64,
 }
@@ -54,6 +57,7 @@ impl Account {
             proxy_disabled: false,
             proxy_disabled_reason: None,
             proxy_disabled_at: None,
+            protected_models: std::collections::HashSet::new(),
             created_at: now,
             last_used: now,
         }
@@ -111,13 +115,13 @@ pub struct DeviceProfile {
     pub sqm_id: String,
 }
 
-/// 指纹历史版本
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceProfileVersion {
-    pub id: String,
-    pub created_at: i64,
-    pub label: String,
-    pub profile: DeviceProfile,
-    #[serde(default)]
-    pub is_current: bool,
+pub struct AccountExportItem {
+    pub email: String,
+    pub refresh_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountExportResponse {
+    pub accounts: Vec<AccountExportItem>,
 }

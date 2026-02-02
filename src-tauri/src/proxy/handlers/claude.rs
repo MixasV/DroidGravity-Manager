@@ -8,7 +8,8 @@ use axum::{
 };
 use bytes::Bytes;
 use futures::StreamExt;
-use serde_json::{json, Value};
+use serde_json::json;
+use serde_json::Value;
 use tokio::time::Duration;
 use tracing::{debug, error, info};
 
@@ -16,7 +17,7 @@ use crate::proxy::mappers::claude::{
     transform_claude_request_in, transform_response, create_claude_sse_stream, ClaudeRequest,
     filter_invalid_thinking_blocks_with_family, close_tool_loop_for_thinking,
     clean_cache_control_from_messages, merge_consecutive_messages,
-    models::{Message, MessageContent},
+    models::{Message, MessageContent, ContentBlock},
 };
 use crate::proxy::server::AppState;
 use crate::proxy::mappers::context_manager::ContextManager;
@@ -954,10 +955,10 @@ pub async fn handle_messages(
         // 1. 立即提取状态码和 headers（防止 response 被 move）
         let status_code = status.as_u16();
         last_status = status;
-        let retry_after = response.headers().get("Retry-After").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
+        let retry_after = response.headers().get("Retry-After").and_then(|h| h.to_str().ok()).map(|s: &str| s.to_string());
         
         // 2. 获取错误文本并转移 Response 所有权
-        let error_text = response.text().await.unwrap_or_else(|_| format!("HTTP {}", status));
+        let error_text = response.text().await.unwrap_or_else(|_: reqwest::Error| format!("HTTP {}", status));
         last_error = format!("HTTP {}: {}", status_code, error_text);
         debug!("[{}] Upstream Error Response: {}", trace_id, error_text);
         if debug_logger::is_enabled(&debug_cfg) {

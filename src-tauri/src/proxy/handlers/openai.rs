@@ -4,7 +4,8 @@ use axum::{
 };
 use base64::Engine as _;
 use bytes::Bytes;
-use serde_json::{json, Value};
+use serde_json::json;
+use serde_json::Value;
 use tracing::{debug, error, info}; // Import Engine trait for encode method
 
 use crate::proxy::mappers::openai::{
@@ -225,7 +226,7 @@ pub async fn handle_chat_completions(
         };
         let query_string = if actual_stream { Some("alt=sse") } else { None };
 
-        let response = tokio::select! {
+        let response: reqwest::Response = tokio::select! {
             res = upstream.call_v1_internal(method, &access_token, gemini_body, query_string) => match res {
                 Ok(r) => r,
                 Err(e) => {

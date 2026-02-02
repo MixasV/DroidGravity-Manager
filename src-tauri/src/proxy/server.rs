@@ -1,4 +1,5 @@
-use crate::models::AppConfig;
+use serde_json::json;
+use crate::models::{AppConfig, AccountExportItem, AccountExportResponse};
 use crate::modules::{account, config, logger, migration, proxy_db, token_stats};
 use crate::proxy::TokenManager;
 use axum::{
@@ -1417,7 +1418,7 @@ async fn admin_set_proxy_monitor_enabled(
 async fn admin_get_proxy_logs_count_filtered(
     Query(params): Query<LogsRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let res = tokio::task::spawn_blocking(move || {
+    let res: Result<Result<u64, String>, tokio::task::JoinError> = tokio::task::spawn_blocking(move || {
         proxy_db::get_logs_count_filtered(&params.filter, params.errors_only)
     })
     .await;
@@ -1451,7 +1452,7 @@ async fn admin_clear_proxy_logs() -> impl IntoResponse {
 async fn admin_get_proxy_log_detail(
     Path(log_id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let res =
+    let res: Result<Result<Option<crate::proxy::monitor::ProxyRequestLog>, String>, tokio::task::JoinError> =
         tokio::task::spawn_blocking(move || crate::modules::proxy_db::get_log_detail(&log_id))
             .await;
 
@@ -1486,7 +1487,7 @@ struct LogsFilterQuery {
 async fn admin_get_proxy_logs_filtered(
     Query(params): Query<LogsFilterQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let res = tokio::task::spawn_blocking(move || {
+    let res: Result<Result<Vec<crate::proxy::monitor::ProxyRequestLog>, String>, tokio::task::JoinError> = tokio::task::spawn_blocking(move || {
         crate::modules::proxy_db::get_logs_filtered(
             &params.filter,
             params.errors_only,
@@ -2640,61 +2641,61 @@ async fn admin_prepare_oauth_url_web(
     let token_manager = state.token_manager.clone();
     let redirect_uri_clone = redirect_uri.clone();
     tokio::spawn(async move {
-        match code_rx.recv().await {
-            Some(Ok(code)) => {
-                crate::modules::logger::log_info(
-                    "Consuming manually submitted OAuth code in background",
-                );
-                // 为 Web 回调提供简化的后端处理流程
-                match crate::modules::oauth::exchange_code(&code, &redirect_uri_clone).await {
-                    Ok(token_resp) => {
-                        // Success! Now add/upsert account
-                        if let Some(refresh_token) = &token_resp.refresh_token {
-                            match token_manager.get_user_info(refresh_token).await {
-                                Ok(user_info) => {
-                                    if let Err(e) = token_manager
-                                        .add_account(&user_info.email, refresh_token)
-                                        .await
-                                    {
+        while let Some(res) = code_rx.recv().await {
+            match res {
+                Ok(code) => {
+                    crate::modules::logger::log_info(
+                        "Consuming manually submitted OAuth code in background",
+                    );
+                    // 为 Web 回调提供简化的后端处理流程
+                    match crate::modules::oauth::exchange_code(&code, &redirect_uri_clone).await {
+                        Ok(token_resp) => {
+                            // Success! Now add/upsert account
+                            if let Some(refresh_token) = &token_resp.refresh_token {
+                                match token_manager.get_user_info(refresh_token).await {
+                                    Ok(user_info) => {
+                                        if let Err(e) = token_manager
+                                            .add_account(&user_info.email, refresh_token)
+                                            .await
+                                        {
+                                            crate::modules::logger::log_error(&format!(
+                                                "Failed to save account in background OAuth: {}",
+                                                e
+                                            ));
+                                        } else {
+                                            crate::modules::logger::log_info(&format!(
+                                                "Successfully added account {} via background OAuth",
+                                                user_info.email
+                                            ));
+                                        }
+                                    }
+                                    Err(e) => {
                                         crate::modules::logger::log_error(&format!(
-                                            "Failed to save account in background OAuth: {}",
+                                            "Failed to fetch user info in background OAuth: {}",
                                             e
-                                        ));
-                                    } else {
-                                        crate::modules::logger::log_info(&format!(
-                                            "Successfully added account {} via background OAuth",
-                                            user_info.email
                                         ));
                                     }
                                 }
-                                Err(e) => {
-                                    crate::modules::logger::log_error(&format!(
-                                        "Failed to fetch user info in background OAuth: {}",
-                                        e
-                                    ));
-                                }
+                            } else {
+                                crate::modules::logger::log_error(
+                                    "Background OAuth error: Google did not return a refresh_token.",
+                                );
                             }
-                        } else {
-                            crate::modules::logger::log_error(
-                                "Background OAuth error: Google did not return a refresh_token.",
-                            );
+                        }
+                        Err(e) => {
+                            crate::modules::logger::log_error(&format!(
+                                "Background OAuth exchange failed: {}",
+                                e
+                            ));
                         }
                     }
-                    Err(e) => {
-                        crate::modules::logger::log_error(&format!(
-                            "Background OAuth exchange failed: {}",
-                            e
-                        ));
-                    }
+                }
+                Err(e) => {
+                    crate::modules::logger::log_error(&format!("Background OAuth flow error: {}", e));
                 }
             }
-            Some(Err(e)) => {
-                crate::modules::logger::log_error(&format!("Background OAuth flow error: {}", e));
-            }
-            None => {
-                crate::modules::logger::log_info("Background OAuth flow channel closed");
-            }
         }
+        crate::modules::logger::log_info("Background OAuth flow channel closed");
     });
 
     Ok(Json(serde_json::json!({
@@ -2716,9 +2717,11 @@ async fn admin_abort_session(
     if let Some((_, token)) = state.abort_tokens.remove(&session_id) {
         token.cancel();
         tracing::info!("[Abort] Manually cancelled session: {}", session_id);
-        (StatusCode::OK, Json(json!({ "status": "aborted", "session_id": session_id })))
+        let resp = serde_json::json!({ "status": "aborted", "session_id": session_id });
+        (StatusCode::OK, Json(resp))
     } else {
-        (StatusCode::NOT_FOUND, Json(json!({ "error": "Session not found or already completed", "session_id": session_id })))
+        let resp = serde_json::json!({ "error": "Session not found or already completed", "session_id": session_id });
+        (StatusCode::NOT_FOUND, Json(resp))
     }
 }
 

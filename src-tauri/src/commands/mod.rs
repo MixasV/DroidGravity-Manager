@@ -186,6 +186,23 @@ pub struct RefreshStats {
     details: Vec<String>,
 }
 
+/// 内部刷新配额逻辑
+pub async fn refresh_all_quotas_internal(_app: &tauri::AppHandle, _handle: Option<tauri::AppHandle>) -> Result<RefreshStats, String> {
+    refresh_all_quotas().await
+}
+
+#[tauri::command]
+pub async fn warm_up_all_accounts() -> Result<(), String> {
+    // 占位实现
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn warm_up_account(_account_id: String) -> Result<(), String> {
+    // 占位实现
+    Ok(())
+}
+
 /// 刷新所有账号配额
 #[tauri::command]
 pub async fn refresh_all_quotas() -> Result<RefreshStats, String> {

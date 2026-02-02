@@ -23,7 +23,7 @@ pub async fn fetch_project_id(access_token: &str) -> Result<String, String> {
         .json(&request_body)
         .send()
         .await
-        .map_err(|e| format!("loadCodeAssist 请求失败: {}", e))?;
+        .map_err(|e: reqwest::Error| format!("loadCodeAssist 请求失败: {}", e))?;
     
     if !response.status().is_success() {
         let status = response.status();
@@ -31,9 +31,9 @@ pub async fn fetch_project_id(access_token: &str) -> Result<String, String> {
         return Err(format!("loadCodeAssist 返回错误 {}: {}", status, body));
     }
     
-    let data: Value = response.json()
+    let data: Value = response.json::<Value>()
         .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
+        .map_err(|e: reqwest::Error| format!("解析响应失败: {}", e))?;
     
     // 提取 cloudaicompanionProject
     if let Some(project_id) = data.get("cloudaicompanionProject")

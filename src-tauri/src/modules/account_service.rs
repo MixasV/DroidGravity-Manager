@@ -101,16 +101,16 @@ impl AccountService {
 
     pub async fn prepare_oauth_url(&self) -> Result<String, String> {
         let handle = match &self.integration {
-            modules::integration::SystemManager::Desktop(h) => Some(h.clone()),
-            modules::integration::SystemManager::Headless => None,
+            modules::integration::SystemManager::Desktop(h) => h.clone(),
+            modules::integration::SystemManager::Headless => return Err("Headless mode does not support OAuth".to_string()),
         };
         modules::oauth_server::prepare_oauth_url(handle).await
     }
 
     pub async fn start_oauth_login(&self) -> Result<Account, String> {
         let handle = match &self.integration {
-            modules::integration::SystemManager::Desktop(h) => Some(h.clone()),
-            modules::integration::SystemManager::Headless => None,
+            modules::integration::SystemManager::Desktop(h) => h.clone(),
+            modules::integration::SystemManager::Headless => return Err("Headless mode does not support OAuth".to_string()),
         };
         let token_res = modules::oauth_server::start_oauth_flow(handle).await?;
         self.process_oauth_token(token_res).await
@@ -118,8 +118,8 @@ impl AccountService {
 
     pub async fn complete_oauth_login(&self) -> Result<Account, String> {
         let handle = match &self.integration {
-            modules::integration::SystemManager::Desktop(h) => Some(h.clone()),
-            modules::integration::SystemManager::Headless => None,
+            modules::integration::SystemManager::Desktop(h) => h.clone(),
+            modules::integration::SystemManager::Headless => return Err("Headless mode does not support OAuth".to_string()),
         };
         let token_res = modules::oauth_server::complete_oauth_flow(handle).await?;
         self.process_oauth_token(token_res).await

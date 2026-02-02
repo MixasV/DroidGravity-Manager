@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Github, User, MessageCircle, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
+import { Save, Github, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
 import { request as invoke } from '../utils/request';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useConfigStore } from '../stores/useConfigStore';
@@ -38,6 +38,7 @@ function Settings() {
     // Dialog state
     const [isClearLogsOpen, setIsClearLogsOpen] = useState(false);
     const [dataDirPath, setDataDirPath] = useState<string>('~/.antigravity_tools/');
+    const [appVersion, setAppVersion] = useState<string>('');
 
     // Update check state
     const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -55,6 +56,11 @@ function Settings() {
         invoke<string>('get_data_dir_path')
             .then(path => setDataDirPath(path))
             .catch(err => console.error('Failed to get data dir:', err));
+
+        // 获取应用版本
+        invoke<string>('get_app_version')
+            .then(version => setAppVersion(version))
+            .catch(err => console.error('Failed to get app version:', err));
 
         // 加载更新设置
         invoke<{ auto_check: boolean; last_check_time: number; check_interval_hours: number }>('get_update_settings')
@@ -569,7 +575,7 @@ function Settings() {
                                     <p className="text-sm text-gray-600 dark:text-gray-400">{t('settings.advanced.logs_desc')}</p>
                                 </div>
                                 <div className="badge badge-primary badge-outline gap-2 font-mono">
-                                    v3.3.21
+                                    v{appVersion}
                                 </div>
                                 <div className="flex items-center gap-4">
                                     <button
@@ -662,7 +668,7 @@ function Settings() {
                                         <div className="absolute inset-0 bg-blue-500/20 rounded-3xl blur-xl group-hover:blur-2xl transition-all duration-500"></div>
                                         <img
                                             src="/icon.png"
-                                            alt="Antigravity Logo"
+                                            alt="DroidGravity Logo"
                                             className="relative w-24 h-24 rounded-3xl shadow-2xl transform group-hover:scale-105 transition-all duration-500 rotate-3 group-hover:rotate-6 object-cover bg-white dark:bg-black"
                                         />
                                     </div>
@@ -671,7 +677,7 @@ function Settings() {
                                         <h3 className="text-3xl font-black text-gray-900 dark:text-base-content tracking-tight mb-2">DroidGravity Manager</h3>
                                         <div className="flex items-center justify-center gap-2 text-sm">
                                             <span className="px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium border border-blue-200 dark:border-blue-800">
-                                                v3.3.21
+                                                v{appVersion}
                                             </span>
                                             <span className="text-gray-400 dark:text-gray-600">•</span>
                                             <span className="text-gray-500 dark:text-gray-400">Professional Account Management</span>
@@ -679,61 +685,26 @@ function Settings() {
                                     </div>
                                 </div>
 
-                                {/* Cards Grid - Now 3 columns */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl px-4">
-                                    {/* Author Card */}
-                                    <div className="bg-white dark:bg-base-100 p-4 rounded-2xl border border-gray-100 dark:border-base-300 shadow-sm hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800 transition-all group flex flex-col items-center text-center gap-3">
-                                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                                            <User className="w-6 h-6 text-blue-500" />
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">{t('settings.about.author')}</div>
-                                            <div className="font-bold text-gray-900 dark:text-base-content">Ctrler</div>
-                                        </div>
-                                    </div>
-
-                                    {/* WeChat Card */}
-                                    <div className="bg-white dark:bg-base-100 p-4 rounded-2xl border border-gray-100 dark:border-base-300 shadow-sm hover:shadow-md hover:border-green-200 dark:hover:border-green-800 transition-all group flex flex-col items-center text-center gap-3">
-                                        <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                                            <MessageCircle className="w-6 h-6 text-green-500" />
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">{t('settings.about.wechat')}</div>
-                                            <div className="font-bold text-gray-900 dark:text-base-content">Ctrler</div>
-                                        </div>
-                                    </div>
-
+                                {/* Cards Grid - Only GitHub */}
+                                <div className="flex justify-center w-full max-w-3xl px-4">
                                     {/* GitHub Card */}
                                     <a
                                         href="https://github.com/MixasV/DroidGravity-Manager"
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="bg-white dark:bg-base-100 p-4 rounded-2xl border border-gray-100 dark:border-base-300 shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all group flex flex-col items-center text-center gap-3 cursor-pointer"
+                                        className="bg-white dark:bg-base-100 p-6 rounded-2xl border border-gray-100 dark:border-base-300 shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all group flex flex-col items-center text-center gap-3 cursor-pointer w-64"
                                     >
                                         <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                                            <Github className="w-6 h-6 text-gray-900 dark:text-white" />
+                                            <Github className="w-8 h-8 text-gray-900 dark:text-white" />
                                         </div>
                                         <div>
                                             <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-1">{t('settings.about.github')}</div>
-                                            <div className="flex items-center gap-1 font-bold text-gray-900 dark:text-base-content">
+                                            <div className="flex items-center gap-1 font-bold text-gray-900 dark:text-base-content text-lg">
                                                 <span>{t('settings.about.view_code')}</span>
-                                                <ExternalLink className="w-3 h-3 text-gray-400" />
+                                                <ExternalLink className="w-4 h-4 text-gray-400" />
                                             </div>
                                         </div>
                                     </a>
-                                </div>
-
-                                {/* Tech Stack Badges */}
-                                <div className="flex gap-2 justify-center">
-                                    <div className="px-3 py-1 bg-gray-50 dark:bg-base-200 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-base-300">
-                                        Tauri v2
-                                    </div>
-                                    <div className="px-3 py-1 bg-gray-50 dark:bg-base-200 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-base-300">
-                                        React 19
-                                    </div>
-                                    <div className="px-3 py-1 bg-gray-50 dark:bg-base-200 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-base-300">
-                                        TypeScript
-                                    </div>
                                 </div>
 
                                 {/* Check for Updates */}

@@ -681,6 +681,12 @@ pub async fn get_data_dir_path() -> Result<String, String> {
     Ok(path.to_string_lossy().to_string())
 }
 
+/// 获取应用版本
+#[tauri::command]
+pub async fn get_app_version() -> Result<String, String> {
+    Ok(env!("CARGO_PKG_VERSION").to_string())
+}
+
 /// 显示主窗口
 #[tauri::command]
 pub async fn show_main_window(window: tauri::Window) -> Result<(), String> {
@@ -816,4 +822,10 @@ pub async fn toggle_proxy_status(
     crate::modules::tray::update_tray_menus(&app);
 
     Ok(())
+}
+
+/// 清理缓存命令
+#[tauri::command]
+pub async fn clear_cache() -> Result<modules::cache::ClearResult, String> {
+    modules::cache::clear_antigravity_cache(None)
 }

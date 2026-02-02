@@ -22,6 +22,7 @@ pub fn run() {
     logger::init_logger();
     
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -118,6 +119,7 @@ pub fn run() {
             commands::clear_log_cache,
             commands::open_data_folder,
             commands::get_data_dir_path,
+            commands::get_app_version,
             commands::show_main_window,
             commands::get_antigravity_path,
             commands::get_antigravity_args,
@@ -142,6 +144,31 @@ pub fn run() {
             commands::proxy::get_proxy_scheduling_config,
             commands::proxy::update_proxy_scheduling_config,
             commands::proxy::clear_proxy_session_bindings,
+            // Debug Console 命令
+            modules::log_bridge::enable_debug_console,
+            modules::log_bridge::disable_debug_console,
+            modules::log_bridge::is_debug_console_enabled,
+            modules::log_bridge::get_debug_console_logs,
+            modules::log_bridge::clear_debug_console_logs,
+            // Security 命令
+            commands::security::get_ip_access_logs,
+            commands::security::get_ip_stats,
+            commands::security::clear_ip_access_logs,
+            commands::security::get_ip_blacklist,
+            commands::security::add_ip_to_blacklist,
+            commands::security::remove_ip_from_blacklist,
+            commands::security::clear_ip_blacklist,
+            commands::security::check_ip_in_blacklist,
+            commands::security::get_ip_whitelist,
+            commands::security::add_ip_to_whitelist,
+            commands::security::remove_ip_from_whitelist,
+            commands::security::clear_ip_whitelist,
+            commands::security::check_ip_in_whitelist,
+            commands::security::get_security_config,
+            commands::security::update_security_config,
+            commands::security::get_ip_token_stats,
+            // Cache 命令
+            commands::clear_cache,
             // Autostart 命令
             commands::autostart::toggle_auto_launch,
             commands::autostart::is_auto_launch_enabled,

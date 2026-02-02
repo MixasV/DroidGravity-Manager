@@ -12,6 +12,7 @@ function Navbar() {
         { path: '/', label: t('nav.dashboard') },
         { path: '/accounts', label: t('nav.accounts') },
         { path: '/api-proxy', label: t('nav.proxy') },
+        { path: '/security', label: t('nav.security', { defaultValue: 'Security' }) },
         { path: '/settings', label: t('nav.settings') },
     ];
 

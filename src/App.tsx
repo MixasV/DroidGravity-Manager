@@ -6,6 +6,7 @@ import Accounts from './pages/Accounts';
 import Settings from './pages/Settings';
 import ApiProxy from './pages/ApiProxy';
 import Monitor from './pages/Monitor';
+import Security from './pages/Security';
 import ThemeManager from './components/common/ThemeManager';
 import { UpdateNotification } from './components/UpdateNotification';
 import { useEffect, useState } from 'react';
@@ -35,6 +36,10 @@ const router = createBrowserRouter([
       {
         path: 'monitor',
         element: <Monitor />,
+      },
+      {
+        path: 'security',
+        element: <Security />,
       },
       {
         path: 'settings',

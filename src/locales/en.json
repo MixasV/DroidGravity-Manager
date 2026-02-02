@@ -260,12 +260,9 @@
         "about": {
             "title": "About",
             "version": "App Version",
-            "tech_stack": "Tech Stack",
-            "author": "Author",
-            "wechat": "WeChat",
             "github": "GitHub",
             "view_code": "View Code",
-            "copyright": "Copyright © 2025-2026 Antigravity. All rights reserved.",
+            "copyright": "Copyright © 2025-2026 DroidGravity. All rights reserved.",
             "check_update": "Check for Updates",
             "checking_update": "Checking...",
             "latest_version": "You're up to date",

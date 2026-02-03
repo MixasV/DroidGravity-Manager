@@ -30,7 +30,7 @@ impl UpstreamClient {
             .pool_idle_timeout(Duration::from_secs(90))  // 空闲连接保持 90 秒
             .tcp_keepalive(Duration::from_secs(60))      // TCP 保活探测 60 秒
             .timeout(Duration::from_secs(600))
-            .user_agent("antigravity/1.11.9 windows/amd64");
+            .user_agent(crate::constants::USER_AGENT.as_str());
 
         if let Some(config) = proxy_config {
             if config.enabled && !config.url.is_empty() {
@@ -59,7 +59,7 @@ impl UpstreamClient {
     /// 获取当前生效的 User-Agent
     pub async fn get_user_agent(&self) -> String {
         let ua_override = self.user_agent_override.read().await;
-        ua_override.as_ref().cloned().unwrap_or_else(|| "antigravity/1.11.9 windows/amd64".to_string())
+        ua_override.as_ref().cloned().unwrap_or_else(|| crate::constants::USER_AGENT.clone())
     }
 
     /// 构建 v1internal URL

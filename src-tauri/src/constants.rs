@@ -82,7 +82,7 @@ pub static USER_AGENT: LazyLock<String> = LazyLock::new(|| {
     );
 
     format!(
-        "droidgravity/{} {}/{}",
+        "antigravity/{} {}/{}",
         version,
         std::env::consts::OS,
         std::env::consts::ARCH

@@ -18,8 +18,7 @@ pub async fn fetch_project_id(access_token: &str) -> Result<String, String> {
     let response: reqwest::Response = client
         .post(url)
         .bearer_auth(access_token)
-        // .header("Host", "cloudcode-pa.googleapis.com") // 移除 Host header，因为已切换域名
-
+        .header("Host", "cloudcode-pa.googleapis.com")
         .header("User-Agent", crate::constants::USER_AGENT.as_str())
         .header("Content-Type", "application/json")
         .json(&request_body)

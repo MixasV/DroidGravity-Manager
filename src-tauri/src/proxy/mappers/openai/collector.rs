@@ -5,6 +5,7 @@ use super::models::*;
 use bytes::Bytes;
 use futures::StreamExt;
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Collects an OpenAI SSE stream into a complete OpenAIResponse
 pub async fn collect_stream_to_json<S, E>(
@@ -139,7 +140,7 @@ where
     } else {
         let mut calls: Vec<(u32, ToolCall)> = tool_calls_map
             .into_iter()
-            .map(|(index, (id, tc_type, name, args_parts))| {
+            .map(|(index, (id, tc_type, name, args_parts)): (u32, (String, String, String, Vec<String>))| {
                 (index, ToolCall {
                     id,
                     r#type: tc_type,

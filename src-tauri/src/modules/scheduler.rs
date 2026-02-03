@@ -231,8 +231,8 @@ pub fn start_scheduler(app_handle: Option<tauri::AppHandle>, proxy_state: crate:
 
                     // Refresh quota
                     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                    if let crate::modules::integration::SystemManager::Desktop(handle) = &state_for_warmup.integration {
-                        let _ = crate::commands::refresh_all_quotas_internal(handle, handle_for_warmup).await;
+                    if let Some(ref handle) = handle_for_warmup {
+                        let _ = crate::commands::refresh_all_quotas_internal(handle, Some(handle.clone())).await;
                     }
                 });
             } else if skipped_cooldown > 0 {
@@ -247,12 +247,9 @@ pub fn start_scheduler(app_handle: Option<tauri::AppHandle>, proxy_state: crate:
             // Sync to frontend if handle exists
             if let Some(handle) = app_handle.as_ref() {
                 let handle_inner = handle.clone();
-                let state_inner = proxy_state.clone();
                 tokio::spawn(async move {
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                    if let crate::modules::integration::SystemManager::Desktop(handle) = &state_inner.integration {
-                        let _ = crate::commands::refresh_all_quotas_internal(handle, Some(handle_inner)).await;
-                    }
+                    let _ = crate::commands::refresh_all_quotas_internal(&handle_inner, Some(handle_inner.clone())).await;
                     logger::log_info("[Scheduler] Quota data synced to frontend");
                 });
             }

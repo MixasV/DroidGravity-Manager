@@ -2625,7 +2625,10 @@ async fn admin_prepare_oauth_url_web(
 
     // 初始化授权流状态，以及后台处理器
     let state_for_oauth = state.clone();
-    let (auth_url, code_rx) = crate::modules::oauth_server::prepare_oauth_flow_manually(&state_for_oauth.integration.app_handle()?)
+    let app_handle = state_for_oauth.integration.app_handle()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
+
+    let (auth_url, code_rx) = crate::modules::oauth_server::prepare_oauth_flow_manually(&app_handle)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
 

@@ -1090,7 +1090,7 @@ impl TokenManager {
                     // Layer 1: 如果最短等待时间 <= 2秒,执行缓冲延迟
                     if let Some(wait_sec) = min_wait {
                         if wait_sec <= 2 {
-                            let _wait_ms = (wait_sec as f64 * 1000.0) as u64;
+                            let wait_ms = (wait_sec as f64 * 1000.0) as u64;
                             tracing::warn!(
                                 "All accounts rate-limited but shortest wait is {}s. Applying {}ms buffer for state sync...",
                                 wait_sec, wait_ms

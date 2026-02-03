@@ -91,7 +91,7 @@ impl SystemIntegration for HeadlessIntegration {
 /// 系统集成管理器：替代 Arc<dyn SystemIntegration> 以解决 async trait 的 dyn 兼容性问题
 #[derive(Clone)]
 pub enum SystemManager {
-    Desktop(tauri::AppHandle),
+    Desktop(tauri::AppHandle<tauri::Wry>),
     Headless,
 }
 

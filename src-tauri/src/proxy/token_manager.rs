@@ -369,24 +369,15 @@ impl TokenManager {
         account_json: &mut serde_json::Value,
         account_path: &PathBuf,
     ) -> bool {
-        // 1. 加载配额保护配置
-        let config = match crate::modules::config::load_app_config() {
-            Ok(cfg) => cfg.quota_protection,
-            Err(_) => return false, // 配置加载失败，跳过保护
-        };
-
-        if !config.enabled {
-            return false; // 配额保护未启用
-        }
-
-        // 2. 获取配额信息
+        // 1. 获取配额信息
         // 注意：我们需要 clone 配额信息来遍历，避免借用冲突，但修改是针对 account_json 的
         let quota = match account_json.get("quota") {
             Some(q) => q.clone(),
             None => return false, // 无配额信息，跳过
         };
 
-        // 3. [兼容性 #621] 检查是否被旧版账号级配额保护禁用,尝试恢复并转为模型级
+        // 2. [兼容性 #621] 检查是否被旧版账号级配额保护禁用,尝试恢复并转为模型级
+        // 这一步必须在加载配置前执行，确保即使配额保护已关闭，也能恢复这些被误锁的账号
         let is_proxy_disabled = account_json
             .get("proxy_disabled")
             .and_then(|v| v.as_bool())
@@ -396,11 +387,27 @@ impl TokenManager {
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
+        let app_config = crate::modules::config::load_app_config().ok();
+        let quota_config = app_config.as_ref().map(|c| &c.quota_protection);
+
         if is_proxy_disabled && reason == "quota_protection" {
             // 如果是被旧版账号级保护禁用的,尝试恢复并转为模型级
+            // 如果配置不存在，使用默认配置进行恢复
+            let default_cfg = crate::models::QuotaProtectionConfig::default();
+            let cfg = quota_config.unwrap_or(&default_cfg);
             return self
-                .check_and_restore_quota(account_json, account_path, &quota, &config)
+                .check_and_restore_quota(account_json, account_path, &quota, cfg)
                 .await;
+        }
+
+        // 3. 加载配额保护配置并检查是否启用
+        let config = match quota_config {
+            Some(cfg) => cfg,
+            None => return false, // 配置加载失败，跳过保护
+        };
+
+        if !config.enabled {
+            return false; // 配额保护未启用
         }
 
         // [修复 #1344] 不再处理其他禁用原因,让调用方负责检查手动禁用

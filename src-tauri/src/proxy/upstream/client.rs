@@ -13,9 +13,9 @@ const V1_INTERNAL_BASE_URL_DAILY: &str = "https://daily-cloudcode-pa.googleapis.
 const V1_INTERNAL_BASE_URL_SANDBOX: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal";
 
 const V1_INTERNAL_BASE_URL_FALLBACKS: [&str; 3] = [
-    V1_INTERNAL_BASE_URL_SANDBOX, // 优先级 1: Sandbox (已知有效且稳定)
+    V1_INTERNAL_BASE_URL_PROD,    // 优先级 1: Prod (主线，最稳定)
     V1_INTERNAL_BASE_URL_DAILY,   // 优先级 2: Daily (备用)
-    V1_INTERNAL_BASE_URL_PROD,    // 优先级 3: Prod (仅作为兜底)
+    V1_INTERNAL_BASE_URL_SANDBOX, // 优先级 3: Sandbox (仅作为兜底)
 ];
 
 pub struct UpstreamClient {

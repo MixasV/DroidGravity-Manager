@@ -1544,33 +1544,40 @@ async fn call_gemini_sync(
     let gemini_body = crate::proxy::mappers::claude::transform_claude_request_in(request, &project_id, false)
         .map_err(|e| format!("Failed to transform request: {}", e))?;
     
-    // Call Gemini API
+    // Call Gemini API (using internal v1internal endpoint for stability)
     let upstream_url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
-        model
+        "https://cloudcode-pa.googleapis.com/v1internal:generateContent"
     );
     
-    debug!("[{}] Calling Gemini API: {}", trace_id, model);
+    debug!("[{}] Calling Gemini API (Internal): {}", trace_id, model);
     
     let response = reqwest::Client::new()
         .post(&upstream_url)
         .header("Authorization", format!("Bearer {}", access_token))
         .header("Content-Type", "application/json")
+        .header("User-Agent", crate::constants::USER_AGENT.as_str())
         .json(&gemini_body)
         .send()
         .await
         .map_err(|e| format!("API call failed: {}", e))?;
     
     if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
         return Err(format!(
             "API returned {}: {}", 
-            response.status(), 
-            response.text().await.unwrap_or_default()
+            status, 
+            body
         ));
     }
     
-    let gemini_response: Value = response.json().await
+    let mut gemini_response: Value = response.json().await
         .map_err(|e| format!("Failed to parse response: {}", e))?;
+    
+    // Unwrap internal response wrapper if present
+    if let Some(inner) = gemini_response.get_mut("response").map(|v| v.take()) {
+        gemini_response = inner;
+    }
     
     // Extract text from response
     gemini_response

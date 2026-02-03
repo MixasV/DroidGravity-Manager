@@ -71,8 +71,10 @@ pub fn map_claude_model_to_gemini(input: &str) -> String {
         return input.to_string();
     }
 
-    // 3. Fallback to default
-    "claude-sonnet-4-5".to_string()
+    // 3. Fallback to original input instead of a fixed important model
+    // This prevents random unknown models from being mapped to "claude-sonnet-4-5"
+    // and potentially triggering incorrect quota protection.
+    input.to_string()
 }
 
 /// 获取所有内置支持的模型列表关键字

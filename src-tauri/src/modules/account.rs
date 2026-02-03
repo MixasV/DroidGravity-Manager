@@ -574,7 +574,12 @@ pub fn set_current_account_id(account_id: &str) -> Result<(), String> {
 pub fn update_account_quota(account_id: &str, quota: QuotaData) -> Result<(), String> {
     let mut account = load_account(account_id)?;
     account.update_quota(quota);
-    save_account(&account)
+    save_account(&account)?;
+    
+    // [FIX] 触发 TokenManager 重新加载该账号以同步 protected_models 状态
+    crate::proxy::server::trigger_account_reload(account_id);
+    
+    Ok(())
 }
 
 /// 切换账号的反代禁用状态
@@ -650,12 +655,8 @@ pub async fn refresh_all_quotas() -> Result<RefreshStats, String> {
                 crate::modules::logger::log_info(&format!("  - Skipping {} (Disabled)", account.email));
                 return false;
             }
-            if let Some(ref q) = account.quota {
-                if q.is_forbidden {
-                    crate::modules::logger::log_info(&format!("  - Skipping {} (Forbidden)", account.email));
-                    return false;
-                }
-            }
+            // [FIX] 不再跳过标记为 Forbidden 的账号，允许它们在配额刷新时尝试恢复
+            // 之前的 403 可能是因为错误的 Sandbox URL 导致的
             true
         })
         .map(|mut account| {

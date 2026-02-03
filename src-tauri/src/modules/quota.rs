@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use crate::models::QuotaData;
 
-const QUOTA_API_URL: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels";
+const QUOTA_API_URL: &str = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct QuotaResponse {
@@ -51,7 +51,7 @@ fn create_client() -> reqwest::Client {
     crate::utils::http::create_client(15)
 }
 
-const CLOUD_CODE_BASE_URL: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com";
+const CLOUD_CODE_BASE_URL: &str = "https://cloudcode-pa.googleapis.com";
 
 /// 获取项目 ID 和订阅类型
 async fn fetch_project_id(access_token: &str, email: &str) -> (Option<String>, Option<String>) {

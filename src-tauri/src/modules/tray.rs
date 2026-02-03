@@ -2,11 +2,11 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
-    Manager, Runtime, Emitter, Listener,
+    Manager, Emitter, Listener,
 };
 use crate::modules;
 
-pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+pub fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     // 1. 加载配置获取语言设置
     let config = modules::load_app_config().unwrap_or_default();
     let texts = modules::i18n::get_tray_texts(&config.language);
@@ -51,6 +51,7 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     ])?;
 
     // 4. 构建托盘
+    let app_for_menu = app.clone();
     let _ = TrayIconBuilder::with_id("main")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -58,22 +59,23 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         .on_menu_event(move |app_handle, event| {
             match event.id().as_ref() {
                 "show" => {
-                    if let Some(window) = app.get_webview_window("main") {
+                    if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.show();
                         let _ = window.set_focus();
                         #[cfg(target_os = "macos")]
-                        app.set_activation_policy(tauri::ActivationPolicy::Regular).unwrap_or(());
+                        app_handle.set_activation_policy(tauri::ActivationPolicy::Regular).unwrap_or(());
                     }
                 }
                 "quit" => {
-                    app.exit(0);
+                    app_handle.exit(0);
                 }
                 "refresh_curr" => {
                     // 异步执行刷新
+                    let app_clone = app_for_menu.clone();
                     tauri::async_runtime::spawn(async move {
                         if let Ok(Some(account_id)) = modules::get_current_account_id() {
                              // 通知前端开始
-                             let _ = app_handle.emit("tray://refresh-current", ());
+                             let _ = app_clone.emit("tray://refresh-current", ());
                              
                              // 执行刷新逻辑
                              if let Ok(mut account) = modules::load_account(&account_id) {
@@ -83,7 +85,7 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                                          // 保存
                                          let _ = modules::update_account_quota(&account.id, quota);
                                          // 更新托盘展示
-                                         update_tray_menus(&app_handle);
+                                         update_tray_menus(&app_clone);
                                      },
                                      Err(e) => {
                                          // 错误处理，可能只记录日志
@@ -95,6 +97,7 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                     });
                 }
                 "switch_next" => {
+                    let app_clone = app_for_menu.clone();
                     tauri::async_runtime::spawn(async move {
                          // 1. 获取所有账号
                          if let Ok(accounts) = modules::list_accounts() {
@@ -110,12 +113,12 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                              };
                              
                              // 2. 切换
-                             let integration = crate::modules::integration::SystemManager::Desktop(app_handle.clone());
+                             let integration = crate::modules::integration::SystemManager::Desktop(app_clone.clone());
                              if let Ok(_) = modules::switch_account(&next_account.id, &integration).await {
                                  // 3. 通知前端
-                                 let _ = app_handle.emit("tray://account-switched", next_account.id.clone());
+                                 let _ = app_clone.emit("tray://account-switched", next_account.id.clone());
                                  // 4. 更新托盘
-                                 update_tray_menus(&app_handle);
+                                 update_tray_menus(&app_clone);
                              }
                          }
                     });
@@ -157,7 +160,7 @@ pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
 }
 
 /// 更新托盘菜单的辅助函数
-pub fn update_tray_menus(app: &tauri::AppHandle) {
+pub fn update_tray_menus<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
          // 读取配置获取语言

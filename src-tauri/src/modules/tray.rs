@@ -6,7 +6,7 @@ use tauri::{
 };
 use crate::modules;
 
-pub fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+pub fn create_tray(app: &tauri::AppHandle<tauri::Wry>) -> tauri::Result<()> {
     // 1. 加载配置获取语言设置
     let config = modules::load_app_config().unwrap_or_default();
     let texts = modules::i18n::get_tray_texts(&config.language);
@@ -160,7 +160,7 @@ pub fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Resul
 }
 
 /// 更新托盘菜单的辅助函数
-pub fn update_tray_menus<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+pub fn update_tray_menus(app: &tauri::AppHandle<tauri::Wry>) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
          // 读取配置获取语言

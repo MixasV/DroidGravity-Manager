@@ -232,7 +232,7 @@ pub fn update_tray_menus(app: &tauri::AppHandle<tauri::Wry>) {
              let sep2 = PredefinedMenuItem::separator(&app_clone).ok();
              let sep3 = PredefinedMenuItem::separator(&app_clone).ok();
              
-             let mut items: Vec<&dyn tauri::menu::IsMenuItem<R>> = vec![&i_u];
+             let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&i_u];
              // 添加动态的额度项
              for item in &quota_items {
                  items.push(item);

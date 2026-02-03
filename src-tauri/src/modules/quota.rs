@@ -4,6 +4,7 @@ use serde_json::json;
 use crate::models::QuotaData;
 
 const QUOTA_API_URL: &str = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels";
+const USER_AGENT_QUOTA: &str = "antigravity/1.11.3 Darwin/arm64";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct QuotaResponse {
@@ -62,7 +63,7 @@ async fn fetch_project_id(access_token: &str, email: &str) -> (Option<String>, O
         .post(format!("{}/v1internal:loadCodeAssist", CLOUD_CODE_BASE_URL))
         .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", access_token))
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header(reqwest::header::USER_AGENT, crate::constants::USER_AGENT.as_str())
+        .header(reqwest::header::USER_AGENT, "antigravity/windows/amd64")
         .json(&meta)
         .send()
         .await;
@@ -146,7 +147,7 @@ pub async fn fetch_quota_inner(access_token: &str, email: &str) -> crate::error:
         match client
             .post(url)
             .bearer_auth(access_token)
-            .header("User-Agent", crate::constants::USER_AGENT.as_str())
+            .header("User-Agent", USER_AGENT_QUOTA)
             .json(&json!(payload))
             .send()
             .await

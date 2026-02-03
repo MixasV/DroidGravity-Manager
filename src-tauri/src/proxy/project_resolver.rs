@@ -19,7 +19,7 @@ pub async fn fetch_project_id(access_token: &str) -> Result<String, String> {
         .post(url)
         .bearer_auth(access_token)
         .header("Host", "cloudcode-pa.googleapis.com")
-        .header("User-Agent", crate::constants::USER_AGENT.as_str())
+        .header("User-Agent", "antigravity/1.11.9 windows/amd64")
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()

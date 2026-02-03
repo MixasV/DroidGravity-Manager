@@ -176,7 +176,6 @@ pub fn start_scheduler(app_handle: Option<tauri::AppHandle>, proxy_state: crate:
                 ));
 
                 let handle_for_warmup = app_handle.clone();
-                let state_for_warmup = proxy_state.clone();
 
                 tokio::spawn(async move {
                     let mut success = 0;

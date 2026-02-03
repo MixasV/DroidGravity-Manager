@@ -1698,7 +1698,6 @@ pub async fn handle_images_edits(
 
     let mut image_data = None;
     let mut mask_data = None;
-    let mut reference_images: Vec<String> = Vec::new(); // Store base64 data of reference images
     let mut prompt = String::new();
     let mut n = 1;
     let mut size = "1024x1024".to_string();
@@ -1825,7 +1824,7 @@ pub async fn handle_images_edits(
         _ => None, // Fallback to standard
     };
 
-    let (mut image_config, _) = crate::proxy::mappers::common_utils::parse_image_config_with_params(
+    let (image_config, _) = crate::proxy::mappers::common_utils::parse_image_config_with_params(
         &model,
         size_input,
         quality_input,
@@ -1875,7 +1874,7 @@ pub async fn handle_images_edits(
     }
 
     // 4. Construct Request Body
-    let mut gemini_body = json!({
+    let gemini_body = json!({
         "project": project_id,
         "requestId": format!("img-edit-{}", uuid::Uuid::new_v4()),
         "model": model,

@@ -52,7 +52,7 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     ])?;
 
     // 4. 构建托盘
-    let _ = TrayIconBuilder::with_id("main")
+    let _ = TrayIconBuilder::<R>::with_id("main")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .icon(icon)

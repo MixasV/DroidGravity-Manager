@@ -5,7 +5,6 @@ use uuid::Uuid;
 use serde::Serialize;
 use chrono;
 use dirs;
-use tracing;
 
 use crate::models::{Account, AccountIndex, AccountSummary, TokenData, QuotaData, DeviceProfile, DeviceProfileVersion, AccountExportItem, AccountExportResponse, RefreshStats};
 use crate::modules;

@@ -8,7 +8,6 @@ use axum::{
     routing::{any, delete, get, post},
     Router,
 };
-use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::atomic::AtomicUsize;
@@ -17,7 +16,7 @@ use std::sync::OnceLock;
 use tokio::sync::oneshot;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, error};
+use tracing::{debug, error};
 
 // [FIX] 全局待重新加载账号队列
 // 当 update_account_quota 更新 protected_models 后，将账号 ID 加入此队列

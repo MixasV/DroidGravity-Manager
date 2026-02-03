@@ -6,7 +6,7 @@ use tauri::{
 };
 use crate::modules;
 
-pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+pub fn create_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     // 1. 加载配置获取语言设置
     let config = modules::load_app_config().unwrap_or_default();
     let texts = modules::i18n::get_tray_texts(&config.language);
@@ -24,7 +24,7 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     let loading_text = format!("{}: ...", texts.current);
     let quota_text = format!("{}: --", texts.quota);
     let info_user = MenuItem::with_id(app, "info_user", &loading_text, false, None::<&str>)?;
-    let info_quota = MenuItem::with_id(app, "info_quota", &quota_text, false, None::<&str>)?;
+    let _info_quota = MenuItem::with_id(app, "info_quota", &quota_text, false, None::<&str>)?;
 
     // 快捷操作区
     let switch_next = MenuItem::with_id(app, "switch_next", &texts.switch_next, true, None::<&str>)?;
@@ -41,7 +41,6 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     // 4. 构建菜单
     let menu = Menu::with_items(app, &[
         &info_user,
-        &info_quota,
         &sep1,
         &switch_next,
         &refresh_curr,
@@ -52,12 +51,11 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     ])?;
 
     // 4. 构建托盘
-    let _ = TrayIconBuilder::<R>::with_id("main")
+    let _ = TrayIconBuilder::with_id("main")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .icon(icon)
-        .on_menu_event(move |app, event| {
-            let app_handle = app.clone();
+        .on_menu_event(move |app_handle, event| {
             match event.id().as_ref() {
                 "show" => {
                     if let Some(window) = app.get_webview_window("main") {
@@ -159,7 +157,7 @@ pub fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
 }
 
 /// 更新托盘菜单的辅助函数
-pub fn update_tray_menus<R: Runtime>(app: &tauri::AppHandle<R>) {
+pub fn update_tray_menus(app: &tauri::AppHandle) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
          // 读取配置获取语言

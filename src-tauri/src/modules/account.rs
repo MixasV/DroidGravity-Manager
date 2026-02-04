@@ -1011,10 +1011,11 @@ pub async fn refresh_all_quotas_logic() -> Result<RefreshStats, String> {
     let tasks: Vec<_> = accounts
         .into_iter()
         .filter(|account| {
-            if account.disabled {
+            if account.disabled || account.proxy_disabled {
                 crate::modules::logger::log_info(&format!(
-                    "  - Skipping {} (Disabled)",
-                    account.email
+                    "  - Skipping {} ({})",
+                    account.email,
+                    if account.disabled { "Disabled" } else { "Proxy Disabled" }
                 ));
                 return false;
             }

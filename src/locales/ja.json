@@ -193,7 +193,9 @@
         },
         "quota_protected": "保護中",
         "details": {
-            "title": "クォータ詳細"
+            "title": "クォータ詳細",
+            "model_quota": "モデルクォータ",
+            "protected_models": "保護されたモデル"
         },
         "toast": {
             "proxy_enabled": "{{count}} 個のアカウントのプロキシを有効にしました",

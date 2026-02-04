@@ -195,7 +195,9 @@
         "warmup_batch_triggered": "{{count}}개 계정에 대해 웜업 작업이 트리거되었습니다",
         "quota_protected": "보호됨",
         "details": {
-            "title": "할당량 상세"
+            "title": "할당량 상세",
+            "model_quota": "모델 할당량",
+            "protected_models": "보호된 모델"
         },
         "toast": {
             "proxy_enabled": "{{count}}개 계정의 프록시를 활성화했습니다",

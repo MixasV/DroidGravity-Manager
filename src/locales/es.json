@@ -192,7 +192,9 @@
         "warmup_batch_triggered": "Tareas de calentamiento activadas para {{count}} cuentas",
         "quota_protected": "Protegida",
         "details": {
-            "title": "Detalles de Cuota"
+            "title": "Detalles de Cuota",
+            "model_quota": "Cuota de Modelo",
+            "protected_models": "Modelos Protegidos"
         },
         "toast": {
             "proxy_enabled": "Proxy habilitado para {{count}} cuentas",

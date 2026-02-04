@@ -192,7 +192,9 @@
         "warmup_batch_triggered": "Tugas pemanasan dicetuskan untuk {{count}} akaun",
         "quota_protected": "Dilindungi",
         "details": {
-            "title": "Butiran Kuota"
+            "title": "Butiran Kuota",
+            "model_quota": "Kuota Model",
+            "protected_models": "Model Dilindungi"
         },
         "toast": {
             "proxy_enabled": "Proksi diaktifkan untuk {{count}} akaun",

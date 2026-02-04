@@ -45,6 +45,7 @@ import { cn } from '../../utils/cn';
 
 import { useConfigStore } from '../../stores/useConfigStore';
 import { QuotaItem } from './QuotaItem';
+import { MODEL_CONFIG, sortModels } from '../../config/modelConfig';
 
 // ============================================================================
 // 类型定义
@@ -275,31 +276,33 @@ function AccountRowContent({
     const { t } = useTranslation();
     const { config, showAllQuotas } = useConfigStore();
 
-    // 模型配置映射：model_id -> { label, protectedKey }
-    const MODEL_CONFIG: Record<string, { label: string; protectedKey: string }> = {
-        'gemini-3-pro-high': { label: 'G3 Pro', protectedKey: 'gemini-pro' },
-        'gemini-3-flash': { label: 'G3 Flash', protectedKey: 'gemini-flash' },
-        'gemini-3-pro-image': { label: 'G3 Image', protectedKey: 'gemini-pro-image' },
-        'claude-sonnet-4-5-thinking': { label: 'Claude 4.5', protectedKey: 'claude-sonnet' },
-    };
+    // 使用统一的模型配置
 
     // 获取要显示的模型列表
     const pinnedModels = config?.pinned_quota_models?.models || Object.keys(MODEL_CONFIG);
 
     // 根据 show_all 状态决定显示哪些模型
-    const displayModels = showAllQuotas
-        ? (account.quota?.models || []).map(m => ({
-            id: m.name.toLowerCase(),
-            label: MODEL_CONFIG[m.name.toLowerCase()]?.label || m.name,
-            protectedKey: MODEL_CONFIG[m.name.toLowerCase()]?.protectedKey || m.name.toLowerCase(),
-            data: m
-        }))
-        : pinnedModels.filter(modelId => MODEL_CONFIG[modelId]).map(modelId => ({
-            id: modelId,
-            label: MODEL_CONFIG[modelId].label,
-            protectedKey: MODEL_CONFIG[modelId].protectedKey,
-            data: account.quota?.models.find(m => m.name.toLowerCase() === modelId)
-        }));
+    const displayModels = sortModels(
+        showAllQuotas
+            ? (account.quota?.models || []).map(m => {
+                const config = MODEL_CONFIG[m.name.toLowerCase()];
+                return {
+                    id: m.name.toLowerCase(),
+                    label: config?.shortLabel || config?.label || m.name,
+                    protectedKey: config?.protectedKey || m.name.toLowerCase(),
+                    data: m
+                };
+            })
+            : pinnedModels.filter(modelId => MODEL_CONFIG[modelId]).map(modelId => {
+                const config = MODEL_CONFIG[modelId];
+                return {
+                    id: modelId,
+                    label: config.shortLabel || config.label,
+                    protectedKey: config.protectedKey,
+                    data: account.quota?.models.find(m => m.name.toLowerCase() === modelId)
+                };
+            })
+    );
 
     const isDisabled = Boolean(account.disabled);
 
@@ -401,6 +404,7 @@ function AccountRowContent({
                                     percentage={modelData?.percentage || 0}
                                     resetTime={modelData?.reset_time}
                                     isProtected={isModelProtected(account.protected_models, model.protectedKey)}
+                                    Icon={MODEL_CONFIG[model.id]?.Icon}
                                 />
                             );
                         })}

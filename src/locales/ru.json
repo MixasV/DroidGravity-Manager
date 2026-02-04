@@ -191,7 +191,9 @@
         "warmup_batch_triggered": "Задачи разогрева запущены для {{count}} аккаунтов",
         "quota_protected": "Защищено",
         "details": {
-            "title": "Детали квоты"
+            "title": "Детали квоты",
+            "model_quota": "Квота модели",
+            "protected_models": "Защищенные модели"
         },
         "toast": {
             "proxy_enabled": "Включен прокси для {{count}} аккаунтов",

@@ -188,7 +188,9 @@
         "warmup_batch_triggered": "Tarefas de aquecimento acionadas para {{count}} contas",
         "quota_protected": "Protegido",
         "details": {
-            "title": "Detalhes da Cota"
+            "title": "Detalhes da Cota",
+            "model_quota": "Cota do Modelo",
+            "protected_models": "Modelos Protegidos"
         },
         "toast": {
             "proxy_enabled": "Proxy habilitado para {{count}} contas",

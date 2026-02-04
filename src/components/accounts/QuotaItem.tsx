@@ -10,9 +10,10 @@ interface QuotaItemProps {
     resetTime?: string;
     isProtected?: boolean;
     className?: string;
+    Icon?: React.ComponentType<{ size?: number; className?: string }>;
 }
 
-export function QuotaItem({ label, percentage, resetTime, isProtected, className }: QuotaItemProps) {
+export function QuotaItem({ label, percentage, resetTime, isProtected, className, Icon }: QuotaItemProps) {
     const { t } = useTranslation();
     const getBgColorClass = (p: number) => {
         const color = getQuotaColor(p);
@@ -61,7 +62,8 @@ export function QuotaItem({ label, percentage, resetTime, isProtected, className
             {/* Content */}
             <div className="relative z-10 w-full flex items-center text-[10px] font-mono leading-none gap-1.5">
                 {/* Model Name */}
-                <span className="flex-1 min-w-0 text-gray-500 dark:text-gray-400 font-bold truncate text-left" title={label}>
+                <span className="flex-1 min-w-0 text-gray-500 dark:text-gray-400 font-bold truncate text-left flex items-center gap-1" title={label}>
+                    {Icon && <Icon size={12} className="shrink-0" />}
                     {label}
                 </span>
 

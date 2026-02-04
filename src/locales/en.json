@@ -198,7 +198,9 @@
         "warmup_batch_triggered": "Warmup tasks triggered for {{count}} accounts",
         "quota_protected": "Protected",
         "details": {
-            "title": "Quota Details"
+            "title": "Quota Details",
+            "model_quota": "Model Quota",
+            "protected_models": "Protected Models"
         },
         "toast": {
             "proxy_enabled": "Enabled proxy for {{count}} accounts",

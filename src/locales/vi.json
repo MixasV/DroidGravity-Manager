@@ -191,7 +191,9 @@
         "warmup_batch_triggered": "Đã kích hoạt làm nóng cho {{count}} tài khoản",
         "quota_protected": "Được bảo vệ",
         "details": {
-            "title": "Chi tiết Hạn mức"
+            "title": "Chi tiết Hạn mức",
+            "model_quota": "Hạn mức Mô hình",
+            "protected_models": "Mô hình Được Bảo vệ"
         },
         "toast": {
             "proxy_enabled": "Đã bật proxy cho {{count}} tài khoản",

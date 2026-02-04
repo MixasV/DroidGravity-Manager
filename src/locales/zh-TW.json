@@ -192,7 +192,9 @@
         "warmup_batch_triggered": "已成功為 {{count}} 個帳號觸發預熱任務",
         "quota_protected": "受保護",
         "details": {
-            "title": "配額詳情"
+            "title": "配額詳情",
+            "model_quota": "模型配額",
+            "protected_models": "受保護模型"
         },
         "toast": {
             "proxy_enabled": "成功啟用 {{count}} 個帳號的反向代理功能",

@@ -184,7 +184,9 @@
         },
         "quota_protected": "Korumalı",
         "details": {
-            "title": "Kota Detayları"
+            "title": "Kota Detayları",
+            "model_quota": "Model Kotası",
+            "protected_models": "Korumalı Modeller"
         },
         "toast": {
             "proxy_enabled": "{{count}} hesap için proxy etkinleştirildi",

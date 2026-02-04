@@ -1,8 +1,9 @@
 import { X, Clock, AlertCircle } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { Account, ModelQuota } from '../../types/account';
+import { Account } from '../../types/account';
 import { formatDate } from '../../utils/format';
 import { useTranslation } from 'react-i18next';
+import { MODEL_CONFIG, sortModels } from '../../config/modelConfig';
 
 interface AccountDetailsDialogProps {
     account: Account | null;
@@ -28,7 +29,7 @@ export default function AccountDetailsDialog({ account, onClose }: AccountDetail
                         </div>
                         {account.quota?.subscription_tier && (
                             <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${account.quota.subscription_tier === 'ultra' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
-                                    account.quota.subscription_tier === 'pro' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-600 dark:bg-base-300 dark:text-gray-400'
+                                account.quota.subscription_tier === 'pro' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-600 dark:bg-base-300 dark:text-gray-400'
                                 }`}>
                                 {account.quota.subscription_tier}
                             </div>
@@ -83,12 +84,23 @@ export default function AccountDetailsDialog({ account, onClose }: AccountDetail
 
                     <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">{t('accounts.details.model_quota')}</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {account.quota?.models?.map((model: ModelQuota) => (
+                        {sortModels(
+                            (account.quota?.models || []).map(model => ({
+                                id: model.name.toLowerCase(),
+                                model
+                            }))
+                        ).map(({ model }) => (
                             <div key={model.name} className="p-4 rounded-xl border border-gray-100 dark:border-base-200 bg-white dark:bg-base-100 hover:border-blue-100 dark:hover:border-blue-900 hover:shadow-sm transition-all group">
                                 <div className="flex justify-between items-start mb-3">
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
-                                        {model.name}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        {(() => {
+                                            const Icon = MODEL_CONFIG[model.name.toLowerCase()]?.Icon;
+                                            return Icon ? <Icon size={16} className="shrink-0" /> : null;
+                                        })()}
+                                        <span className="text-sm font-medium font-mono text-gray-700 dark:text-gray-300 group-hover:text-blue-700 dark:group-hover:text-blue-400 transition-colors">
+                                            {MODEL_CONFIG[model.name.toLowerCase()]?.label || model.name}
+                                        </span>
+                                    </div>
                                     <span
                                         className={`text-xs font-bold px-2 py-0.5 rounded-md ${model.percentage >= 50 ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
                                             model.percentage >= 20 ? 'bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :

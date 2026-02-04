@@ -194,7 +194,9 @@
         "warmup_batch_triggered": "تم إطلاق مهام التنشيط لـ {{count}} حساب",
         "quota_protected": "محمي",
         "details": {
-            "title": "تفاصيل الحصة"
+            "title": "تفاصيل الحصة",
+            "model_quota": "حصة النموذج",
+            "protected_models": "النماذج المحمية"
         },
         "toast": {
             "proxy_enabled": "تم تفعيل الوكيل لـ {{count}} حساب",

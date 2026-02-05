@@ -1,5 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
-
 // 探测环境
 const isTauri = typeof window !== 'undefined' && (!!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI__);
 
@@ -40,7 +38,7 @@ const COMMAND_MAPPING: Record<string, { url: string; method: 'GET' | 'POST' | 'D
   'clear_proxy_session_bindings': { url: '/api/proxy/session-bindings/clear', method: 'POST' },
   'clear_proxy_rate_limit': { url: '/api/proxy/rate-limits/:accountId', method: 'DELETE' },
   'clear_all_proxy_rate_limits': { url: '/api/proxy/rate-limits', method: 'DELETE' },
-  'check_proxy_health': { url: '/api/proxy/health-check/trigger', method: 'POST' }, // Custom endpoint needed in backend or generic command
+  'check_proxy_health': { url: '/api/proxy/health-check/trigger', method: 'POST' },
   'get_preferred_account': { url: '/api/proxy/preferred-account', method: 'GET' },
   'set_preferred_account': { url: '/api/proxy/preferred-account', method: 'POST' },
   'fetch_zai_models': { url: '/api/zai/models/fetch', method: 'POST' },
@@ -54,8 +52,6 @@ const COMMAND_MAPPING: Record<string, { url: string; method: 'GET' | 'POST' | 'D
   'get_proxy_logs_count_filtered': { url: '/api/logs/count', method: 'GET' },
   'clear_proxy_logs': { url: '/api/logs/clear', method: 'POST' },
   'get_proxy_log_detail': { url: '/api/logs/:logId', method: 'GET' },
-
-
 
   // Debug Console
   'enable_debug_console': { url: '/api/debug/enable', method: 'POST' },
@@ -81,6 +77,7 @@ const COMMAND_MAPPING: Record<string, { url: string; method: 'GET' | 'POST' | 'D
   'get_token_stats_model_trend_daily': { url: '/api/stats/token/model-trend/daily', method: 'GET' },
   'get_token_stats_account_trend_hourly': { url: '/api/stats/token/account-trend/hourly', method: 'GET' },
   'get_token_stats_account_trend_daily': { url: '/api/stats/token/account-trend/daily', method: 'GET' },
+  'clear_token_stats': { url: '/api/stats/token/clear', method: 'POST' },
 
   // System
   'get_data_dir_path': { url: '/api/system/data-dir', method: 'GET' },
@@ -91,6 +88,8 @@ const COMMAND_MAPPING: Record<string, { url: string; method: 'GET' | 'POST' | 'D
   'toggle_auto_launch': { url: '/api/system/autostart/toggle', method: 'POST' },
   'get_http_api_settings': { url: '/api/system/http-api/settings', method: 'GET' },
   'save_http_api_settings': { url: '/api/system/http-api/settings', method: 'POST' },
+  'get_antigravity_path': { url: '/api/system/antigravity/path', method: 'GET' },
+  'get_antigravity_args': { url: '/api/system/antigravity/args', method: 'GET' },
 
   // Cloudflared
   'cloudflared_install': { url: '/api/proxy/cloudflared/install', method: 'POST' },
@@ -116,8 +115,11 @@ const COMMAND_MAPPING: Record<string, { url: string; method: 'GET' | 'POST' | 'D
   'import_custom_db': { url: '/api/accounts/import/db-custom', method: 'POST' },
   'sync_account_from_db': { url: '/api/accounts/sync/db', method: 'POST' },
 
-  // System Extra
+  // System Extra & Cache
   'open_data_folder': { url: '/api/system/open-folder', method: 'POST' },
+  'clear_antigravity_cache': { url: '/api/system/cache/clear', method: 'POST' },
+  'get_antigravity_cache_paths': { url: '/api/system/cache/paths', method: 'GET' },
+  'clear_log_cache': { url: '/api/system/logs/clear-cache', method: 'POST' },
 
   // Security / IP Management
   'get_ip_access_logs': { url: '/api/security/logs', method: 'GET' },
@@ -156,6 +158,7 @@ export async function request<T>(cmd: string, args?: any): Promise<T> {
   // 1. Tauri 环境：直接使用 invoke ...
   if (isTauri) {
     try {
+      const { invoke } = await import('@tauri-apps/api/core');
       return await invoke<T>(cmd, args);
     } catch (error) {
       console.error(`Tauri Invoke Error [${cmd}]:`, error);

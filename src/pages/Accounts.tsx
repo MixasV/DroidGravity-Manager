@@ -1,5 +1,5 @@
-import { join } from "@tauri-apps/api/path";
-import { open, save } from "@tauri-apps/plugin-dialog";
+
+
 import {
   Download,
   LayoutGrid,
@@ -539,11 +539,14 @@ function Accounts() {
       // 2. Determine Path & Export
       if (isTauri()) {
         let path: string | null = null;
+        const { join } = await import("@tauri-apps/api/path");
+
         if (config?.default_export_path) {
           // Use default path
           path = await join(config.default_export_path, fileName);
         } else {
           // Use Native Dialog
+          const { save } = await import("@tauri-apps/plugin-dialog");
           path = await save({
             filters: [
               {
@@ -663,6 +666,7 @@ function Accounts() {
   const handleImportJson = async () => {
     if (isTauri()) {
       try {
+        const { open } = await import("@tauri-apps/plugin-dialog");
         const selected = await open({
           multiple: false,
           filters: [

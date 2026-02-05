@@ -620,6 +620,12 @@ impl AxumServer {
             )
             .route("/system/antigravity/path", get(admin_get_antigravity_path))
             .route("/system/antigravity/args", get(admin_get_antigravity_args))
+            .route("/system/cache/clear", post(admin_clear_antigravity_cache))
+            .route(
+                "/system/cache/paths",
+                get(admin_get_antigravity_cache_paths),
+            )
+            .route("/system/logs/clear-cache", post(admin_clear_log_cache))
             // Security / IP Monitoring
             .route("/security/logs", get(admin_get_ip_access_logs))
             .route("/security/logs/clear", post(admin_clear_ip_access_logs))
@@ -1816,6 +1822,40 @@ async fn admin_get_antigravity_args() -> Result<impl IntoResponse, (StatusCode, 
         )
     })?;
     Ok(Json(args))
+}
+
+async fn admin_clear_antigravity_cache(
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = crate::commands::clear_antigravity_cache().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
+    Ok(Json(res))
+}
+
+async fn admin_get_antigravity_cache_paths(
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = crate::commands::get_antigravity_cache_paths()
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: e }),
+            )
+        })?;
+    Ok(Json(res))
+}
+
+async fn admin_clear_log_cache() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    crate::commands::clear_log_cache().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
+    Ok(StatusCode::OK)
 }
 
 // Token Stats Handlers

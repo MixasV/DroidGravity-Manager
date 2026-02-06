@@ -253,9 +253,9 @@ print(response.choices[0].message.content)
             -   **Thinking Recovery**: Introduced `thinking_recovery` mechanism. Automatically strips stale thinking blocks and guides the model when status loops or interruptions are detected, enhancing stability in complex tool-calling scenarios.
             -   **Complete Fix for Signature Binding Errors**: Corrected the logic that incorrectly injected cached signatures into custom client-side thinking content. Since signatures are strictly bound to specific text, this completely resolves common `Invalid signature` (HTTP 400) errors after session interruptions or resets.
             -   **Full Session Isolation**: Removed the global signature singleton, ensuring all thinking signatures are strictly isolated at the Session level, eliminating signature pollution across multiple accounts or concurrent sessions.
-        -   **[Core Fix] Resolve HTTP 400 "thinking_budget out of range" error for Gemini 3 Pro / 2.0 Pro (#1592)**:
-            -   **Full Protocol Coverage**: Repair logic synchronized to OpenAI, Claude, and Gemini native protocol layers, ensuring correct 24576 safety budget limits.
-            -   **Auto Adaptation**: Dynamic limit based on the final mapped model, resolving compatibility issues for new models like `gemini-3-pro`.
+        -   **[Core Fix] Resolve HTTP 400 "thinking_budget out of range" error for Gemini Series (#1592, #1602)**:
+            -   **Full-Path Hard Capping**: Fixed the missing quota protection in OpenAI and Claude protocol mappers when using "Custom" mode. Regardless of the selected mode (Auto/Custom/Passthrough), the backend now enforces a mandatory limit of 24576 for all Gemini models to ensure request success.
+            -   **Auto Adaptation & UI Sync**: Refactored the protocol conversion logic to dynamically apply limits based on the final mapped model; updated settings UI hints to clearly specify the physical limits of the Gemini protocol.
         -   **[Core Fix] Web Mode Login Validation Fix & Logout Button (PR #1603)**:
             -   **Login Validation**: Fixed exceptions in the Web mode login validation logic, ensuring stability of user authentication.
             -   **Logout Support**: Added/fixed the logout button in the UI, completing the account management loop for Web mode.

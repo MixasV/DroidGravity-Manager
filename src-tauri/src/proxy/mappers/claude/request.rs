@@ -1705,7 +1705,24 @@ fn build_generation_config(
         let tb_config = crate::proxy::config::get_thinking_budget_config();
         let budget = match tb_config.mode {
             crate::proxy::config::ThinkingBudgetMode::Passthrough => budget_tokens,
-            crate::proxy::config::ThinkingBudgetMode::Custom => tb_config.custom_value,
+            crate::proxy::config::ThinkingBudgetMode::Custom => {
+                let mut custom_value = tb_config.custom_value;
+                // [FIX #1602] 针对 Gemini 系列模型，在自定义模式下也强制执行 24576 上限
+                let model_lower = mapped_model.to_lowercase();
+                let is_gemini_limited = has_web_search
+                    || model_lower.contains("gemini")
+                    || model_lower.contains("flash")
+                    || model_lower.ends_with("-thinking");
+                
+                if is_gemini_limited && custom_value > 24576 {
+                    tracing::warn!(
+                        "[Claude-Request] Custom mode: capping thinking_budget from {} to 24576 for Gemini model {}",
+                        custom_value, mapped_model
+                    );
+                    custom_value = 24576;
+                }
+                custom_value
+            },
             crate::proxy::config::ThinkingBudgetMode::Auto => {
                 // [FIX #1592] Use mapped model for robust detection, same as OpenAI protocol
                 let model_lower = mapped_model.to_lowercase();
@@ -1713,8 +1730,12 @@ fn build_generation_config(
                     || model_lower.contains("gemini")
                     || model_lower.contains("flash")
                     || model_lower.ends_with("-thinking");
-                if is_gemini_limited {
-                    budget_tokens.min(24576)
+                if is_gemini_limited && budget_tokens > 24576 {
+                    tracing::info!(
+                        "[Claude-Request] Auto mode: capping thinking_budget from {} to 24576 for Gemini model {}", 
+                        budget_tokens, mapped_model
+                    );
+                    24576
                 } else {
                     budget_tokens
                 }

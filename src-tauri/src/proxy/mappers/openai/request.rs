@@ -431,7 +431,21 @@ pub fn transform_openai_request(
             }
             crate::proxy::config::ThinkingBudgetMode::Custom => {
                 // 自定义模式：使用全局配置的固定值
-                let custom_value = tb_config.custom_value as i64;
+                let mut custom_value = tb_config.custom_value as i64;
+                
+                // [FIX #1592/1602] 即使在自定义模式下，针对 Gemini 类模型也必须强制执行 24576 上限
+                // 因为上游 Vertex AI / Gemini API 严禁超过此值（超过必报 400）
+                let is_gemini_limited = mapped_model_lower.contains("gemini")
+                    || is_claude_thinking; // Claude thinking 模型转发到 Gemini 同样受限
+
+                if is_gemini_limited && custom_value > 24576 {
+                    tracing::warn!(
+                        "[OpenAI-Request] Custom mode: capping thinking_budget from {} to 24576 for Gemini model {}",
+                        custom_value, mapped_model
+                    );
+                    custom_value = 24576;
+                }
+
                 tracing::debug!(
                     "[OpenAI-Request] Custom mode: overriding {} with fixed value {}",
                     user_budget,
@@ -728,6 +742,66 @@ mod tests {
             .as_i64()
             .unwrap();
         assert_eq!(budget, 24576, "Gemini-3-pro budget must be capped to 24576 in Auto mode");
+    }
+
+    #[test]
+    fn test_issue_1602_custom_mode_gemini_capping() {
+        // [FIX #1602] Regression test for custom mode capping
+        use crate::proxy::config::{ThinkingBudgetConfig, ThinkingBudgetMode, update_thinking_budget_config};
+        
+        // 设置自定义模式，且数值超过 24k
+        update_thinking_budget_config(ThinkingBudgetConfig {
+            mode: ThinkingBudgetMode::Custom,
+            custom_value: 32000,
+        });
+
+        let req = OpenAIRequest {
+            model: "gemini-2.0-flash-thinking".to_string(),
+            messages: vec![OpenAIMessage {
+                role: "user".to_string(),
+                content: Some(OpenAIContent::String("test".into())),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            }],
+            stream: false,
+            n: None,
+            max_tokens: None,
+            temperature: None,
+            top_p: None,
+            stop: None,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            instructions: None,
+            input: None,
+            prompt: None,
+            size: None,
+            quality: None,
+            person_generation: None,
+            thinking: None,
+        };
+
+        // 验证针对 Gemini 模型即使是 Custom 模式也会被修正为 24576
+        let (result, _sid, _msg_count) = transform_openai_request(&req, "test-v", "gemini-2.0-flash-thinking");
+        let budget = result["request"]["generationConfig"]["thinkingConfig"]["thinkingBudget"]
+            .as_i64()
+            .unwrap();
+        assert_eq!(budget, 24576, "Gemini custom budget must be capped to 24576");
+
+        // 验证非 Gemini 模型（如 Claude 原生路径，假设映射后名不含 gemini）则不应截断
+        // 注意：这里的 transform_openai_request 第三个参数是 mapped_model
+        let (result_claude, _, _) = transform_openai_request(&req, "test-v", "claude-3-7-sonnet");
+        let budget_claude = result_claude["request"]["generationConfig"]["thinkingConfig"]["thinkingBudget"]
+            .as_i64();
+        // 如果不是 gemini 模型且协议中没带 thinking 配置，可能会是 None 或 32000
+        // 在该测试环境下，由于模拟的是 OpenAI 格式转 Gemini 路径，如果没有 gemini 关键词通常不进入 thinking 逻辑
+        // 我们只需确保 gemini 路径正确受限即可。
+
+        // 恢复默认配置
+        update_thinking_budget_config(ThinkingBudgetConfig::default());
     }
 
     #[test]

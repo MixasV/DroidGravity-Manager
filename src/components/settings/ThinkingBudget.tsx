@@ -56,7 +56,7 @@ export default function ThinkingBudget({
                     </h4>
                     <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                         {t("settings.thinking_budget.description", {
-                            defaultValue: "控制 AI 深度思考时的 Token 预算。某些模型（如 Flash、带 -thinking 后缀的模型）受上游 24576 上限限制。",
+                            defaultValue: "控制 AI 深度思考时的 Token 预算。Gemini 系列所有思考模型（包含 Pro 和 Flash）以及带 -thinking 后缀的模型受物理上限 24576 限制。",
                         })}
                     </p>
                 </div>
@@ -95,7 +95,7 @@ export default function ThinkingBudget({
                 <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
                     <p className="text-xs text-gray-600 dark:text-gray-400">
                         {t("settings.thinking_budget.auto_hint", {
-                            defaultValue: "自动模式：对 Flash 模型、-thinking 后缀模型、以及启用 Web Search 的请求自动限制在 24576 以避免 API 错误。其他模型保持原始请求值。",
+                            defaultValue: "自动模式：对 Gemini 协议模型（Pro/Flash/Thinking）以及启用 Web Search 的请求自动截断至 24576 以避免 API 错误。其他模型保持原始请求值。",
                         })}
                     </p>
                 </div>
@@ -142,7 +142,7 @@ export default function ThinkingBudget({
                         <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/30 rounded-lg p-3">
                             <p className="text-xs text-amber-700 dark:text-amber-400">
                                 {t("settings.thinking_budget.high_value_warning", {
-                                    defaultValue: "当前值超过 24576，某些模型（Flash、-thinking）可能不支持并导致请求失败。",
+                                    defaultValue: "当前值超过 24576，Gemini/Vertex AI 系列模型将由后端自动修正为此上限以防止请求失败。",
                                 })}
                             </p>
                         </div>

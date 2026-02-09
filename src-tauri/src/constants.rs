@@ -1,8 +1,11 @@
 use std::sync::LazyLock;
 use regex::Regex;
 
+/// URL to fetch the latest Antigravity version
+const VERSION_URL: &str = "https://antigravity-auto-updater-974169037036.us-central1.run.app";
+
 /// Second fallback: Official Changelog page
-const CHANGELOG_URL: &str = "https://github.com/MixasV/DroidGravity-Manager/releases";
+const CHANGELOG_URL: &str = "https://antigravity.google/changelog";
 
 /// Fallback version derived from Cargo.toml at compile time
 const FALLBACK_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -21,18 +24,24 @@ fn parse_version(text: &str) -> Option<String> {
 /// Version source for logging
 #[derive(Debug, PartialEq)]
 enum VersionSource {
+    RemoteAPI,
     ChangelogWeb,
     CargoToml,
 }
 
 /// Fetch version from remote API or Changelog website
 fn fetch_remote_version() -> (String, VersionSource) {
-    // 1. Try Scraping Changelog (Fallback)
+    // 1. Try Version API (Fastest)
+    if let Some(v) = try_fetch_version(VERSION_URL, "version-api-fetch") {
+        return (v, VersionSource::RemoteAPI);
+    }
+
+    // 2. Try Scraping Changelog (Fallback)
     if let Some(v) = try_fetch_version(CHANGELOG_URL, "changelog-scrape") {
         return (v, VersionSource::ChangelogWeb);
     }
 
-    // 2. Fallback: Cargo.toml version (always valid at compile time)
+    // 3. Fallback: Cargo.toml version (always valid at compile time)
     (FALLBACK_VERSION.to_string(), VersionSource::CargoToml)
 }
 

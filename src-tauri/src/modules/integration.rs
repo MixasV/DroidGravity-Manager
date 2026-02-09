@@ -30,10 +30,28 @@ impl SystemIntegration for DesktopIntegration {
             process::close_antigravity(20)?;
         }
 
-        // 3. 写入设备 Profile
-        if let Some(ref profile) = account.device_profile {
-            device::write_profile(&storage_path, profile)?;
-        }
+        // 3. 写入设备 Profile (с fallback на全局或生成新的)
+        let profile_to_apply = {
+            if let Some(ref p) = account.device_profile {
+                p.clone()
+            } else if let Some(global) = device::load_global_original() {
+                global
+            } else {
+                // 捕获当前 storage 为原始指纹，或生成新的
+                let current = device::read_profile(&storage_path)
+                    .unwrap_or_else(|_| device::generate_profile());
+                let _ = device::save_global_original(&current);
+                current
+            }
+        };
+        crate::modules::logger::log_info(&format!(
+            "写入设备指纹到 storage.json: machineId={}, macMachineId={}, devDeviceId={}, sqmId={}",
+            profile_to_apply.machine_id,
+            profile_to_apply.mac_machine_id,
+            profile_to_apply.dev_device_id,
+            profile_to_apply.sqm_id
+        ));
+        device::write_profile(&storage_path, &profile_to_apply)?;
 
         // 4. 数据库处理与 Token 注入
         let db_path = db::get_db_path()?;

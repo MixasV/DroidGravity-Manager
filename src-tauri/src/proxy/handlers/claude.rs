@@ -1093,8 +1093,32 @@ pub async fn handle_messages(
         // 5. 统一处理所有可重试错误
         // [REMOVED] 不再特殊处理 QUOTA_EXHAUSTED,允许账号轮换
         // 原逻辑会在第一个账号配额耗尽时直接返回,导致"平衡"模式无法切换账号
-        
-        
+
+        // [FIX] 403 时设置 is_forbidden 状态，避免账号被重复选中
+        if status_code == 403 {
+            // Check for VALIDATION_REQUIRED error - temporarily block account
+            if error_text.contains("VALIDATION_REQUIRED") ||
+               error_text.contains("verify your account") ||
+               error_text.contains("validation_url")
+            {
+                tracing::warn!(
+                    "[Claude] VALIDATION_REQUIRED detected on account {}, temporarily blocking",
+                    email
+                );
+                let block_minutes = 10i64;
+                let block_until = chrono::Utc::now().timestamp() + (block_minutes * 60);
+                if let Err(e) = token_manager.set_validation_block_public(&account_id, block_until, &error_text).await {
+                    tracing::error!("Failed to set validation block: {}", e);
+                }
+            }
+
+            // 标记账号为 forbidden 并从内存池移除
+            tracing::warn!("[Claude] Account {} received 403, marking as forbidden and removing from pool", email);
+            if let Err(e) = token_manager.disable_account(&account_id, "403_forbidden").await {
+                tracing::error!("Failed to disable account {}: {}", email, e);
+            }
+        }
+
         // 确定重试策略
         let strategy = determine_retry_strategy(status_code, &error_text, retried_without_thinking);
         
@@ -1149,7 +1173,14 @@ pub async fn handle_messages(
             _ => "api_error",
         };
 
-        (last_status, headers, Json(json!({
+        // [FIX] 403 时返回 503，避免 Claude Code 客户端退出到登录页
+        let response_status = if last_status.as_u16() == 403 {
+            StatusCode::SERVICE_UNAVAILABLE
+        } else {
+            last_status
+        };
+
+        (response_status, headers, Json(json!({
             "type": "error",
             "error": {
                 "id": "err_retry_exhausted",
@@ -1175,7 +1206,14 @@ pub async fn handle_messages(
             _ => "api_error",
         };
 
-        (last_status, headers, Json(json!({
+        // [FIX] 403 时返回 503，避免 Claude Code 客户端退出到登录页
+        let response_status = if last_status.as_u16() == 403 {
+            StatusCode::SERVICE_UNAVAILABLE
+        } else {
+            last_status
+        };
+
+        (response_status, headers, Json(json!({
             "type": "error",
             "error": {
                 "id": "err_retry_exhausted",

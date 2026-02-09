@@ -152,7 +152,8 @@ pub fn create_token(
     description: Option<String>,
     max_ips: i32,
     curfew_start: Option<String>,
-    curfew_end: Option<String>
+    curfew_end: Option<String>,
+    custom_expires_at: Option<i64>  // 自定义过期时间戳 (秒)
 ) -> Result<UserToken, String> {
     let conn = connect_db()?;
     let id = Uuid::new_v4().to_string();
@@ -163,6 +164,7 @@ pub fn create_token(
         "day" => Some(Utc::now().checked_add_signed(chrono::Duration::days(1)).unwrap().timestamp()),
         "week" => Some(Utc::now().checked_add_signed(chrono::Duration::weeks(1)).unwrap().timestamp()),
         "month" => Some(Utc::now().checked_add_signed(chrono::Duration::days(30)).unwrap().timestamp()),
+        "custom" => custom_expires_at, // 使用自定义时间戳
         _ => None, // "never" or other
     };
 

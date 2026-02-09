@@ -9,6 +9,7 @@ pub struct CreateTokenRequest {
     pub max_ips: i32,
     pub curfew_start: Option<String>,
     pub curfew_end: Option<String>,
+    pub custom_expires_at: Option<i64>,  // 自定义过期时间戳 (秒)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,6 +40,7 @@ pub async fn create_user_token(request: CreateTokenRequest) -> Result<UserToken,
         request.max_ips,
         request.curfew_start,
         request.curfew_end,
+        request.custom_expires_at,
     )
 }
 

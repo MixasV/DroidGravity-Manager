@@ -1057,6 +1057,7 @@ pub async fn handle_messages(
                         crate::proxy::mappers::claude::models::MessageContent::Array(blocks) => {
                             blocks.push(crate::proxy::mappers::claude::models::ContentBlock::Text {
                                 text: repair_prompt.to_string(),
+                                cache_control: None,
                             });
                         }
                     }
@@ -1080,7 +1081,8 @@ pub async fn handle_messages(
                                 if !thinking.is_empty() {
                                     tracing::debug!("[Fallback] Converting thinking block to text (len={})", thinking.len());
                                     new_blocks.push(crate::proxy::mappers::claude::models::ContentBlock::Text { 
-                                        text: thinking 
+                                        text: thinking,
+                                        cache_control: None,
                                     });
                                 }
                             },

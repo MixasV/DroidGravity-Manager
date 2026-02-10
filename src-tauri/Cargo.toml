@@ -1,6 +1,6 @@
 [package]
 name = "droidgravity_manager"
-version = "1.2.0"
+version = "1.2.1"
 description = "Account manager and API proxy for Factory Droid with Google Gemini and Anthropic Claude support"
 authors = ["DroidGravity Contributors"]
 license = "CC-BY-NC-SA-4.0"

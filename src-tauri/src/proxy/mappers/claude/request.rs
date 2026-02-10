@@ -297,7 +297,7 @@ fn sort_thinking_blocks_first(messages: &mut [Message]) {
                             ContentBlock::Thinking { .. } | ContentBlock::RedactedThinking { .. } => {
                                 thinking_blocks.push(block);
                             }
-                            ContentBlock::Text { text } => {
+                            ContentBlock::Text { text, .. } => {
                                 // Filter out purely empty or structural text like "(no content)"
                                 if !text.trim().is_empty() && text != "(no content)" {
                                     text_blocks.push(block);
@@ -930,7 +930,7 @@ fn build_contents(
         MessageContent::Array(blocks) => {
             for item in blocks {
                 match item {
-                    ContentBlock::Text { text } => {
+                    ContentBlock::Text { text, .. } => {
                         if text != "(no content)" {
                             // [NEW] 任务去重逻辑: 如果当前是 User 消息，且紧跟在 ToolResult 之后，
                             // 检查该文本是否与上一轮任务描述完全一致。

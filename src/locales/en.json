@@ -212,7 +212,14 @@
             "auto_launch": "Launch at Startup",
             "auto_launch_enabled": "Enabled",
             "auto_launch_disabled": "Disabled",
-            "auto_launch_desc": "Automatically launch DroidGravity Manager when system starts"
+            "auto_launch_desc": "Automatically launch DroidGravity Manager when system starts",
+            "auto_check_update": "Auto Check for Updates",
+            "auto_check_update_desc": "Automatically check for new versions on startup",
+            "update_check_interval": "Check Interval (hours)",
+            "update_check_interval_desc": "Set the interval for automatic update checks (1-168 hours)",
+            "auto_check_enabled": "Auto check enabled",
+            "auto_check_disabled": "Auto check disabled",
+            "interval_saved": "Check interval saved"
         },
         "account": {
             "title": "Account Settings",
@@ -596,6 +603,7 @@
             "title": "Request Details",
             "request_payload": "Request Payload",
             "response_payload": "Response Payload",
+            "payload_empty": "No payload data",
             "duration": "Duration",
             "tokens": "Tokens (I/O)",
             "time": "Time",

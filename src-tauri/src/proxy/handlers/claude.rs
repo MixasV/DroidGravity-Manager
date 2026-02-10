@@ -208,10 +208,19 @@ pub async fn handle_messages(
     // 这对于 z.ai (Anthropic 直接转发) 路径至关重要，因为原始结构必须符合协议
     merge_consecutive_messages(&mut request.messages);
 
-    // [CRITICAL FIX] 清理 cache_control 字段 - 仅对 Gemini 路径
-    // z.ai (Anthropic) 支持 Prompt Caching，所以需要保留 cache_control
-    // Gemini 不支持 cache_control，必须清理以避免 "Extra inputs are not permitted" 错误
-    if !use_zai {
+    // [CRITICAL FIX] Cache Control 处理
+    if use_zai {
+        // z.ai (Anthropic) 路径: 先清理旧的 cache_control，再应用新的
+        // 这确保只有最新的对话历史被缓存，避免缓存失效
+        clean_cache_control_from_messages(&mut request.messages);
+        
+        // 应用 Prompt Caching 标记以降低 token 消耗
+        use crate::proxy::mappers::claude::request::apply_cache_control_for_anthropic;
+        apply_cache_control_for_anthropic(&mut request.messages, &mut request.system);
+        
+        tracing::debug!("[{}] Applied Prompt Caching for Anthropic route", trace_id);
+    } else {
+        // Gemini 路径: 只清理，因为 Gemini 不支持 cache_control
         clean_cache_control_from_messages(&mut request.messages);
     }
 
@@ -917,6 +926,28 @@ pub async fn handle_messages(
                     Ok(r) => r,
                     Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, format!("Convert error: {}", e)).into_response(),
                 };
+                
+                // [FIX] Check if usageMetadata is missing - this indicates quota exhaustion
+                // even when API returns 200 OK (Anthropic sometimes does this)
+                if gemini_response.usage_metadata.is_none() {
+                    tracing::warn!(
+                        "[{}] Response missing usage metadata for account {} - likely quota exhausted. Marking as rate-limited.",
+                        trace_id, email
+                    );
+                    
+                    // Mark account as quota-exhausted to trigger rotation
+                    token_manager.mark_rate_limited_async(
+                        &email, 
+                        429, // Treat as quota error
+                        None, 
+                        "Response missing usage metadata - quota likely exhausted", 
+                        Some(&request_with_mapped.model)
+                    ).await;
+                    
+                    // Continue to next attempt/account
+                    last_error = format!("Account {} quota exhausted (missing usage metadata)", email);
+                    continue;
+                }
                 
                 // Determine context limit based on model
                 let context_limit = crate::proxy::mappers::claude::utils::get_context_limit_for_model(&request_with_mapped.model);

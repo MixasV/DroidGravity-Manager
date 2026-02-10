@@ -212,7 +212,14 @@
             "auto_launch": "开机自动启动",
             "auto_launch_enabled": "启用",
             "auto_launch_disabled": "禁用",
-            "auto_launch_desc": "系统启动时自动运行 DroidGravity Manager"
+            "auto_launch_desc": "系统启动时自动运行 DroidGravity Manager",
+            "auto_check_update": "自动检查更新",
+            "auto_check_update_desc": "启动时自动检查新版本",
+            "update_check_interval": "检查间隔（小时）",
+            "update_check_interval_desc": "设置自动检查更新的时间间隔（1-168 小时）",
+            "auto_check_enabled": "已启用自动检查更新",
+            "auto_check_disabled": "已禁用自动检查更新",
+            "interval_saved": "已保存检查间隔设置"
         },
         "account": {
             "title": "账号设置",
@@ -596,6 +603,7 @@
             "title": "请求详情",
             "request_payload": "请求报文 (Request)",
             "response_payload": "响应报文 (Response)",
+            "payload_empty": "无数据",
             "duration": "耗时",
             "tokens": "Token 消耗 (输入/输出)",
             "time": "请求时间",

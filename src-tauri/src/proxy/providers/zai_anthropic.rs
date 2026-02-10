@@ -170,10 +170,6 @@ pub async fn forward_anthropic_json(
         .entry(header::CONTENT_TYPE)
         .or_insert(HeaderValue::from_static("application/json"));
 
-    // [FIX #290] Clean cache_control before sending to Anthropic API
-    // This prevents "Extra inputs are not permitted" errors
-    deep_remove_cache_control(&mut body);
-
     // [FIX #307] Explicitly serialize body to Vec<u8> to ensure Content-Length is set correctly.
     // This avoids "Transfer-Encoding: chunked" for small bodies which caused connection errors.
     let body_bytes = serde_json::to_vec(&body).unwrap_or_default();

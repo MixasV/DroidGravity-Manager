@@ -655,7 +655,7 @@ impl TokenManager {
         force_rotate: bool,
         session_id: Option<&str>,
         target_model: &str,
-    ) -> Result<(String, String, String, u64), String> {
+    ) -> Result<(String, String, String, String, u64), String> {
         // [FIX] 检查并处理待重新加载的账号（配额保护同步）
         let pending_accounts = crate::proxy::server::take_pending_reload_accounts();
         for account_id in pending_accounts {
@@ -691,7 +691,7 @@ impl TokenManager {
         force_rotate: bool,
         session_id: Option<&str>,
         target_model: &str,
-    ) -> Result<(String, String, String, u64), String> {
+    ) -> Result<(String, String, String, String, u64), String> {
         let mut tokens_snapshot: Vec<ProxyToken> =
             self.tokens.iter().map(|e| e.value().clone()).collect();
         let total = tokens_snapshot.len();
@@ -1263,13 +1263,13 @@ impl TokenManager {
                 }
             }
 
-            return Ok((token.access_token, project_id, token.email, 0));
+            return Ok((token.access_token, project_id, token.email, token.account_id, 0));
         }
 
         Err(last_error.unwrap_or_else(|| "All accounts failed".to_string()))
     }
 
-    async fn disable_account(&self, account_id: &str, reason: &str) -> Result<(), String> {
+    pub async fn disable_account(&self, account_id: &str, reason: &str) -> Result<(), String> {
         let path = if let Some(entry) = self.tokens.get(account_id) {
             entry.account_path.clone()
         } else {
@@ -1351,7 +1351,7 @@ impl TokenManager {
     pub async fn get_token_by_email(
         &self,
         email: &str,
-    ) -> Result<(String, String, String, u64), String> {
+    ) -> Result<(String, String, String, String, u64), String> {
         // 查找账号信息
         let token_info = {
             let mut found = None;
@@ -1390,7 +1390,7 @@ impl TokenManager {
 
         // 检查是否过期 (提前5分钟)
         if now < timestamp + expires_in - 300 {
-            return Ok((current_access_token, project_id, email.to_string(), 0));
+            return Ok((current_access_token, project_id, email.to_string(), account_id, 0));
         }
 
         tracing::info!("[Warmup] Token for {} is expiring, refreshing...", email);
@@ -1417,6 +1417,7 @@ impl TokenManager {
                     token_response.access_token,
                     project_id,
                     email.to_string(),
+                    account_id,
                     0,
                 ))
             }

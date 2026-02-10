@@ -160,7 +160,7 @@ pub async fn handle_chat_completions(
 
         // 4. 获取 Token (使用准确的 request_type)
         // 关键：在重试尝试 (attempt > 0) 时强制轮换账号
-        let (access_token, project_id, email, _wait_ms) = match token_manager
+        let (access_token, project_id, email, _account_id, _wait_ms) = match token_manager
             .get_token(
                 &config.request_type,
                 attempt > 0,
@@ -1049,7 +1049,7 @@ pub async fn handle_completions(
         // 重试时强制轮换，除非只是简单的网络抖动但 Claude 逻辑里 attempt > 0 总是 force_rotate
         let force_rotate = attempt > 0;
 
-        let (access_token, project_id, email, _wait_ms) = match token_manager
+        let (access_token, project_id, email, _account_id, _wait_ms) = match token_manager
             .get_token(
                 &config.request_type,
                 force_rotate,
@@ -1524,7 +1524,7 @@ pub async fn handle_images_generations(
     let upstream = state.upstream.clone();
     let token_manager = state.token_manager;
 
-    let (access_token, project_id, email, _wait_ms) = match token_manager
+    let (access_token, project_id, email, _account_id, _wait_ms) = match token_manager
         .get_token("image_gen", false, None, "dall-e-3")
         .await
     {
@@ -1796,7 +1796,7 @@ pub async fn handle_images_edits(
     // 1. Get Upstream & Token
     let upstream = state.upstream.clone();
     let token_manager = state.token_manager;
-    let (access_token, project_id, email, _wait_ms) = match token_manager
+    let (access_token, project_id, email, _account_id, _wait_ms) = match token_manager
         .get_token("image_gen", false, None, "dall-e-3")
         .await
     {

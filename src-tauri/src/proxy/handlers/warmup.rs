@@ -54,7 +54,7 @@ pub async fn handle_warmup(
         (at.clone(), pid.clone())
     } else {
         match state.token_manager.get_token_by_email(&req.email).await {
-            Ok((at, pid, _, _wait_ms)) => (at, pid),
+            Ok((at, pid, _, _, _wait_ms)) => (at, pid),
             Err(e) => {
                 warn!(
                     "[Warmup-API] Step 1 FAILED: Token error for {}: {}",

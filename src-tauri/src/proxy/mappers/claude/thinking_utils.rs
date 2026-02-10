@@ -136,6 +136,7 @@ pub fn close_tool_loop_for_thinking(messages: &mut Vec<Message>) {
                 content: MessageContent::Array(vec![ContentBlock::Text {
                     text: "[System: Tool execution completed. Proceeding to final response.]"
                         .to_string(),
+                    cache_control: None,
                 }]),
             });
             messages.push(Message {
@@ -143,6 +144,7 @@ pub fn close_tool_loop_for_thinking(messages: &mut Vec<Message>) {
                 content: MessageContent::Array(vec![ContentBlock::Text {
                     text: "Please provide the final result based on the tool output above."
                         .to_string(),
+                    cache_control: None,
                 }]),
             });
         } else if state.interrupted_tool {
@@ -159,6 +161,7 @@ pub fn close_tool_loop_for_thinking(messages: &mut Vec<Message>) {
                         role: "assistant".to_string(),
                         content: MessageContent::Array(vec![ContentBlock::Text {
                             text: "[Tool call was interrupted by user.]".to_string(),
+                            cache_control: None,
                         }]),
                     },
                 );
@@ -230,6 +233,7 @@ pub fn filter_invalid_thinking_blocks_with_family(
             if blocks.is_empty() && original_len > 0 {
                 blocks.push(ContentBlock::Text {
                     text: ".".to_string(),
+                    cache_control: None,
                 });
             }
         }

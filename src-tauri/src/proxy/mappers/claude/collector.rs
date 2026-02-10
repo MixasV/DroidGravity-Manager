@@ -167,6 +167,7 @@ where
                 if !current_text.is_empty() {
                     response.content.push(ContentBlock::Text {
                         text: current_text.clone(),
+                        cache_control: None,
                     });
                     current_text.clear();
                 } else if !current_thinking.is_empty() {
@@ -259,7 +260,7 @@ mod tests {
         assert_eq!(response.model, "claude-3-5-sonnet");
         assert_eq!(response.content.len(), 1);
         
-        if let ContentBlock::Text { text } = &response.content[0] {
+        if let ContentBlock::Text { text, .. } = &response.content[0] {
             assert_eq!(text, "Hello World");
         } else {
             panic!("Expected Text block");

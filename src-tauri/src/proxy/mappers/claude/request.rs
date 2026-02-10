@@ -352,13 +352,13 @@ pub fn merge_consecutive_messages(messages: &mut Vec<Message>) {
                         current_blocks.extend(next_blocks);
                     }
                     (MessageContent::Array(current_blocks), MessageContent::String(next_text)) => {
-                        current_blocks.push(ContentBlock::Text { text: next_text });
+                        current_blocks.push(ContentBlock::Text { text: next_text, cache_control: None });
                     }
                     (MessageContent::String(current_text), MessageContent::String(next_text)) => {
                         *current_text = format!("{}\n\n{}", current_text, next_text);
                     }
                     (MessageContent::String(current_text), MessageContent::Array(next_blocks)) => {
-                        let mut new_blocks = vec![ContentBlock::Text { text: current_text.clone() }];
+                        let mut new_blocks = vec![ContentBlock::Text { text: current_text.clone(), cache_control: None }];
                         new_blocks.extend(next_blocks);
                         current.content = MessageContent::Array(new_blocks);
                     }
@@ -2231,7 +2231,7 @@ mod tests {
                             signature: Some("sig".to_string()),
                             cache_control: None,
                         },
-                        ContentBlock::Text { text: "Hi".to_string() }
+                        ContentBlock::Text { text: "Hi".to_string(), cache_control: None }
                     ]),
                 },
             ],
@@ -2276,7 +2276,7 @@ mod tests {
                         ContentBlock::RedactedThinking {
                             data: "some data".to_string(),
                         },
-                         ContentBlock::Text { text: "Hi".to_string() }
+                         ContentBlock::Text { text: "Hi".to_string(), cache_control: None }
                     ]),
                 },
             ],
@@ -2316,13 +2316,13 @@ mod tests {
                 role: "assistant".to_string(),
                 content: MessageContent::Array(vec![
                     // Wrong order: Text before Thinking (simulates kilo compression)
-                    ContentBlock::Text { text: "Some regular text".to_string() },
+                    ContentBlock::Text { text: "Some regular text".to_string(), cache_control: None },
                     ContentBlock::Thinking { 
                         thinking: "My thinking process".to_string(),
                         signature: Some("valid_signature_1234567890_abcdefghij_klmnopqrstuvwxyz_test".to_string()),
                         cache_control: None,
                     },
-                    ContentBlock::Text { text: "More text".to_string() },
+                    ContentBlock::Text { text: "More text".to_string(), cache_control: None },
                 ]),
             }
         ];
@@ -2358,7 +2358,7 @@ mod tests {
                         signature: Some("sig123".to_string()),
                         cache_control: None,
                     },
-                    ContentBlock::Text { text: "Some text".to_string() },
+                    ContentBlock::Text { text: "Some text".to_string(), cache_control: None },
                 ]),
             }
         ];
@@ -2415,11 +2415,11 @@ mod tests {
         if let MessageContent::Array(blocks) = &messages[0].content {
             assert_eq!(blocks.len(), 2);
             match &blocks[0] {
-                ContentBlock::Text { text } => assert_eq!(text, "Hello"),
+                ContentBlock::Text { text, .. } => assert_eq!(text, "Hello"),
                 _ => panic!("Expected text block"),
             }
             match &blocks[1] {
-                ContentBlock::Text { text } => assert_eq!(text, "World"),
+                ContentBlock::Text { text, .. } => assert_eq!(text, "World"),
                 _ => panic!("Expected text block"),
             }
         } else {
@@ -2436,7 +2436,7 @@ mod tests {
                 _ => panic!("Expected tool_result block"),
             }
             match &blocks[1] {
-                ContentBlock::Text { text } => assert_eq!(text, "System Reminder"),
+                ContentBlock::Text { text, .. } => assert_eq!(text, "System Reminder"),
                 _ => panic!("Expected text block"),
             }
         } else {

@@ -132,7 +132,7 @@ impl ContextManager {
                 MessageContent::Array(blocks) => {
                     for block in blocks {
                         match block {
-                            ContentBlock::Text { text } => {
+                            ContentBlock::Text { text, .. } => {
                                 total += estimate_tokens_from_str(text);
                             }
                             ContentBlock::Thinking { thinking, .. } => {
@@ -493,7 +493,7 @@ mod tests {
                         signature: None,
                         cache_control: None,
                     },
-                    ContentBlock::Text { text: "A0".into() },
+                    ContentBlock::Text { text: "A0".into(), cache_control: None },
                 ]),
             },
             Message {
@@ -508,7 +508,7 @@ mod tests {
                         signature: None,
                         cache_control: None,
                     },
-                    ContentBlock::Text { text: "A1".into() },
+                    ContentBlock::Text { text: "A1".into(), cache_control: None },
                 ]),
             },
             Message {
@@ -523,7 +523,7 @@ mod tests {
                         signature: None,
                         cache_control: None,
                     },
-                    ContentBlock::Text { text: "A2".into() },
+                    ContentBlock::Text { text: "A2".into(), cache_control: None },
                 ]),
             },
             Message {

@@ -301,7 +301,7 @@ pub async fn handle_messages(
                     // 对于数组，提取所有 Text 块并拼接，忽略 ToolResult
                     arr.iter()
                         .filter_map(|block| match block {
-                            crate::proxy::mappers::claude::models::ContentBlock::Text { text } => Some(text.as_str()),
+                            crate::proxy::mappers::claude::models::ContentBlock::Text { text, .. } => Some(text.as_str()),
                             _ => None,
                         })
                         .collect::<Vec<_>>()
@@ -1439,7 +1439,7 @@ fn extract_last_user_message_for_detection(request: &ClaudeRequest) -> Option<St
                 crate::proxy::mappers::claude::models::MessageContent::Array(arr) => {
                     arr.iter()
                         .filter_map(|block| match block {
-                            crate::proxy::mappers::claude::models::ContentBlock::Text { text } => Some(text.as_str()),
+                            crate::proxy::mappers::claude::models::ContentBlock::Text { text, .. } => Some(text.as_str()),
                             _ => None,
                         })
                         .collect::<Vec<_>>()
@@ -1496,7 +1496,7 @@ fn is_warmup_request(request: &ClaudeRequest) -> bool {
             crate::proxy::mappers::claude::models::MessageContent::Array(arr) => {
                 for block in arr {
                     match block {
-                        crate::proxy::mappers::claude::models::ContentBlock::Text { text } => {
+                        crate::proxy::mappers::claude::models::ContentBlock::Text { text, .. } => {
                             let trimmed = text.trim();
                             if trimmed == "Warmup" || trimmed.starts_with("Warmup\n") {
                                 return true;

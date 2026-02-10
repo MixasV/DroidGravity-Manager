@@ -444,6 +444,7 @@ impl NonStreamingProcessor {
                     if start_idx > 0 {
                         self.content_blocks.push(ContentBlock::Text {
                             text: current_text[..start_idx].to_string(),
+                            cache_control: None,
                         });
                     }
 
@@ -472,7 +473,7 @@ impl NonStreamingProcessor {
 
         if !current_text.is_empty() {
             self.content_blocks
-                .push(ContentBlock::Text { text: current_text });
+                .push(ContentBlock::Text { text: current_text, cache_control: None });
         }
     }
 
@@ -598,7 +599,7 @@ mod tests {
         assert_eq!(claude_resp.content.len(), 1);
 
         match &claude_resp.content[0] {
-            ContentBlock::Text { text } => {
+            ContentBlock::Text { text, .. } => {
                 assert_eq!(text, "Hello, world!");
             }
             _ => panic!("Expected Text block"),
@@ -665,7 +666,7 @@ mod tests {
         }
 
         match &claude_resp.content[1] {
-            ContentBlock::Text { text } => {
+            ContentBlock::Text { text, .. } => {
                 assert_eq!(text, "The answer is 42");
             }
             _ => panic!("Expected Text block"),

@@ -701,6 +701,60 @@ pub fn close_antigravity(timeout_secs: u64) -> Result<(), String> {
     Ok(())
 }
 
+fn start_with_path(path: std::path::PathBuf, path_str: String, args: Option<Vec<String>>) -> Result<(), String> {
+    crate::modules::logger::log_info(&format!("使用手动配置路径启动: {}", path_str));
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS 下如果是 .app 目录，用 open
+        if path_str.ends_with(".app") || path.is_dir() {
+            let mut cmd = Command::new("open");
+            cmd.arg("-a").arg(&path_str);
+
+            // 添加启动参数
+            if let Some(ref args) = args {
+                for arg in args {
+                    cmd.arg(arg);
+                }
+            }
+
+            cmd.spawn().map_err(|e| format!("启动失败 (open): {}", e))?;
+        } else {
+            let mut cmd = Command::new(&path_str);
+
+            // 添加启动参数
+            if let Some(ref args) = args {
+                for arg in args {
+                    cmd.arg(arg);
+                }
+            }
+
+            cmd.spawn()
+                .map_err(|e| format!("启动失败 (direct): {}", e))?;
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let mut cmd = Command::new(&path_str);
+
+        // 添加启动参数
+        if let Some(ref args) = args {
+            for arg in args {
+                cmd.arg(arg);
+            }
+        }
+
+        cmd.spawn().map_err(|e| format!("启动失败: {}", e))?;
+    }
+
+    crate::modules::logger::log_info(&format!(
+        "Antigravity 启动命令已发送 (手动路径: {}, 参数: {:?})",
+        path_str, args
+    ));
+    Ok(())
+}
+
 /// 启动 Antigravity
 pub fn start_antigravity() -> Result<(), String> {
     crate::modules::logger::log_info("正在启动 Antigravity...");

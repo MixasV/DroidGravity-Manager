@@ -1143,13 +1143,6 @@ fn build_contents(
                                     };
                                     if should_use_sig {
                                         part["thoughtSignature"] = json!(sig);
-                                        
-                                        // [CRITICAL FIX] For Gemini 3, the thoughtSignature must also be INSIDE functionCall
-                                        if let Some(fc) = part.get_mut("functionCall") {
-                                            if let Some(obj) = fc.as_object_mut() {
-                                                obj.insert("thoughtSignature".to_string(), json!(sig));
-                                            }
-                                        }
                                     }
                                 }
                             }

@@ -204,13 +204,16 @@ pub async fn handle_messages(
         }
     };
 
-    // [CRITICAL FIX] 预先清理所有消息中的 cache_control 字段 (Issue #744)
-    // 必须在序列化之前处理，以确保 z.ai 和 Google Flow 都不受历史消息缓存标记干扰
-    clean_cache_control_from_messages(&mut request.messages);
-
     // [FIX #813] 合并连续的同角色消息 (Consecutive User Messages)
     // 这对于 z.ai (Anthropic 直接转发) 路径至关重要，因为原始结构必须符合协议
     merge_consecutive_messages(&mut request.messages);
+
+    // [CRITICAL FIX] 清理 cache_control 字段 - 仅对 Gemini 路径
+    // z.ai (Anthropic) 支持 Prompt Caching，所以需要保留 cache_control
+    // Gemini 不支持 cache_control，必须清理以避免 "Extra inputs are not permitted" 错误
+    if !use_zai {
+        clean_cache_control_from_messages(&mut request.messages);
+    }
 
     // Get model family for signature validation
     let target_family = if use_zai {

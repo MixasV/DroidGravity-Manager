@@ -75,7 +75,7 @@ export const IpStatistics: React.FC<Props> = ({ refreshKey }) => {
         return <div className="p-10 text-center text-gray-500">{t('security.stats.no_data')}</div>;
     }
 
-    const maxReqCount = Math.max(...tokenStats.map(ip => ip.request_count), 1);
+    const maxReqCount = Math.max(...(tokenStats || []).map(ip => ip.request_count || 0), 1);
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
@@ -88,7 +88,7 @@ export const IpStatistics: React.FC<Props> = ({ refreshKey }) => {
                             <Activity size={32} />
                         </div>
                         <div className="stat-title">{t('security.stats.total_requests')}</div>
-                        <div className="stat-value text-blue-500">{formatCompactNumber(stats.total_requests)}</div>
+                        <div className="stat-value text-blue-500">{formatCompactNumber(stats?.total_requests || 0)}</div>
                         <div className="stat-desc">{t('security.stats.total_requests_desc')}</div>
                     </div>
 
@@ -97,7 +97,7 @@ export const IpStatistics: React.FC<Props> = ({ refreshKey }) => {
                             <Users size={32} />
                         </div>
                         <div className="stat-title">{t('security.stats.unique_ips')}</div>
-                        <div className="stat-value text-purple-500">{formatCompactNumber(stats.unique_ips)}</div>
+                        <div className="stat-value text-purple-500">{formatCompactNumber(stats?.unique_ips || 0)}</div>
                         <div className="stat-desc">{t('security.stats.unique_ips_desc')}</div>
                     </div>
 
@@ -106,7 +106,7 @@ export const IpStatistics: React.FC<Props> = ({ refreshKey }) => {
                             <ShieldAlert size={32} />
                         </div>
                         <div className="stat-title">{t('security.stats.blocked_requests')}</div>
-                        <div className="stat-value text-red-500">{formatCompactNumber(stats.blocked_requests)}</div>
+                        <div className="stat-value text-red-500">{formatCompactNumber(stats?.blocked_requests || 0)}</div>
                         <div className="stat-desc">{t('security.stats.blocked_requests_desc')}</div>
                     </div>
                 </div>
@@ -151,14 +151,15 @@ export const IpStatistics: React.FC<Props> = ({ refreshKey }) => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {tokenStats.map((ip, index) => {
+                                    {(tokenStats || []).map((ip, index) => {
                                         // Determine color based on usage magnitude
                                         let colorClass = "text-green-500";
-                                        if (ip.total_tokens > 1000000) colorClass = "text-red-500 font-bold";
-                                        else if (ip.total_tokens > 100000) colorClass = "text-yellow-500 font-bold";
-                                        else if (ip.total_tokens > 10000) colorClass = "text-blue-500";
+                                        const totalTokens = ip.total_tokens || 0;
+                                        if (totalTokens > 1000000) colorClass = "text-red-500 font-bold";
+                                        else if (totalTokens > 100000) colorClass = "text-yellow-500 font-bold";
+                                        else if (totalTokens > 10000) colorClass = "text-blue-500";
 
-                                        const percentage = Math.min(100, Math.max(0, (ip.request_count / maxReqCount) * 100)) || 0;
+                                        const percentage = Math.min(100, Math.max(0, ((ip.request_count || 0) / maxReqCount) * 100)) || 0;
 
                                         return (
                                             <tr key={ip.client_ip} className="hover:bg-gray-50 dark:hover:bg-base-300">
@@ -169,7 +170,7 @@ export const IpStatistics: React.FC<Props> = ({ refreshKey }) => {
                                                 <td>
                                                     <div className="flex flex-col gap-1">
                                                         <div className="flex justify-between text-xs text-gray-500">
-                                                            <span>{formatCompactNumber(ip.request_count)} reqs</span>
+                                                            <span>{formatCompactNumber(ip.request_count || 0)} reqs</span>
                                                             <span>{Math.round(percentage)}%</span>
                                                         </div>
                                                         <div className="w-full bg-gray-100 dark:bg-base-300 rounded-full h-1.5">
@@ -181,18 +182,18 @@ export const IpStatistics: React.FC<Props> = ({ refreshKey }) => {
                                                     </div>
                                                 </td>
                                                 <td className={`text-right font-mono text-lg ${colorClass}`}>
-                                                    {formatCompactNumber(ip.total_tokens)}
+                                                    {formatCompactNumber(totalTokens)}
                                                 </td>
                                                 <td className="text-right font-mono text-gray-500 text-xs">
-                                                    {formatCompactNumber(ip.input_tokens)}
+                                                    {formatCompactNumber(ip.input_tokens || 0)}
                                                 </td>
                                                 <td className="text-right font-mono text-gray-500 text-xs">
-                                                    {formatCompactNumber(ip.output_tokens)}
+                                                    {formatCompactNumber(ip.output_tokens || 0)}
                                                 </td>
                                             </tr>
                                         );
                                     })}
-                                    {tokenStats.length === 0 && (
+                                    {(!tokenStats || tokenStats.length === 0) && (
                                         <tr>
                                             <td colSpan={6} className="text-center py-8 text-gray-500">
                                                 {t('security.stats.no_data')}

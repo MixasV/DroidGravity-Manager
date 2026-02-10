@@ -1,7 +1,7 @@
 {
   "name": "droidgravity-manager",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.3",
   "type": "module",
   "scripts": {
     "dev": "vite",

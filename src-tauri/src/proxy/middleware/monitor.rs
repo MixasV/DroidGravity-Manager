@@ -120,8 +120,19 @@ pub async fn monitor_middleware(
         
         tokio::spawn(async move {
             let mut last_few_bytes = Vec::new();
+            let mut captured_content = String::new();
+            let mut capture_count = 0;
+
             while let Some(chunk_res) = stream.next().await {
                 if let Ok(chunk) = chunk_res {
+                    // Capture first ~2048 bytes of the stream for debugging
+                    if capture_count < 2048 {
+                        if let Ok(s) = std::str::from_utf8(&chunk) {
+                            captured_content.push_str(s);
+                            capture_count += chunk.len();
+                        }
+                    }
+
                     if chunk.len() > 8192 {
                         last_few_bytes = chunk.slice(chunk.len()-8192..).to_vec();
                     } else {
@@ -136,6 +147,11 @@ pub async fn monitor_middleware(
                 }
             }
             
+            // Post-process captured content to make it readable in the UI
+            if !captured_content.is_empty() {
+                log.response_body = Some(format!("[Streaming] {}", captured_content.chars().take(1024).collect::<String>()));
+            }
+
             if let Ok(full_tail) = std::str::from_utf8(&last_few_bytes) {
                 for line in full_tail.lines().rev() {
                     if line.starts_with("data: ") && (line.contains("\"usage\"") || line.contains("\"usageMetadata\"")) {

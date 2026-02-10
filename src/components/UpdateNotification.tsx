@@ -57,12 +57,12 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
             <Download className="w-5 h-5" />
-            <h3 className="font-semibold text-lg">新版本可用</h3>
+            <h3 className="font-semibold text-lg">Update Available</h3>
           </div>
           <button
             onClick={handleClose}
             className="text-white/80 hover:text-white transition-colors"
-            aria-label="关闭"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -70,10 +70,10 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
         
         <div className="space-y-2">
           <p className="text-sm text-white/90">
-            发现新版本 <span className="font-bold">{updateInfo.latest_version}</span>
+            A new version <span className="font-bold">{updateInfo.latest_version}</span> is available.
           </p>
           <p className="text-xs text-white/70">
-            当前版本: {updateInfo.current_version}
+            Current version: {updateInfo.current_version}
           </p>
           
           <button
@@ -81,7 +81,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
             className="w-full mt-3 bg-white text-blue-600 hover:bg-blue-50 font-medium py-2 px-4 rounded-md transition-colors duration-200 flex items-center justify-center gap-2"
           >
             <Download className="w-4 h-4" />
-            立即下载
+            Download Now
           </button>
         </div>
       </div>

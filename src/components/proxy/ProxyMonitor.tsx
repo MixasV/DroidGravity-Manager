@@ -257,8 +257,8 @@ export const ProxyMonitor: React.FC<ProxyMonitorProps> = ({ className }) => {
                                     <div className="space-y-1.5">
                                         <span className="block text-gray-500 dark:text-slate-400 uppercase font-black text-[10px] tracking-widest">{t('monitor.details.tokens')}</span>
                                         <div className="font-mono text-[11px] flex gap-2">
-                                            <span className="text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 px-2.5 py-1 rounded-md border border-blue-200 dark:border-blue-800/50 font-bold">In: {formatCompactNumber(selectedLog.input_tokens ?? 0)}</span>
-                                            <span className="text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/40 px-2.5 py-1 rounded-md border border-green-200 dark:border-green-800/50 font-bold">Out: {formatCompactNumber(selectedLog.output_tokens ?? 0)}</span>
+                                            <span className="text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 px-2.5 py-1 rounded-md border border-blue-200 dark:border-blue-800/50 font-bold">In: {formatCompactNumber(selectedLog?.input_tokens ?? 0)}</span>
+                                            <span className="text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/40 px-2.5 py-1 rounded-md border border-green-200 dark:border-green-800/50 font-bold">Out: {formatCompactNumber(selectedLog?.output_tokens ?? 0)}</span>
                                         </div>
                                     </div>
                                 </div>

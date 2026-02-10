@@ -58,6 +58,8 @@ pub struct SystemBlock {
     #[serde(rename = "type")]
     pub block_type: String,
     pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<serde_json::Value>,
 }
 
 /// Message
@@ -79,7 +81,11 @@ pub enum MessageContent {
 #[serde(tag = "type")]
 pub enum ContentBlock {
     #[serde(rename = "text")]
-    Text { text: String },
+    Text { 
+        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cache_control: Option<serde_json::Value>,
+    },
 
     #[serde(rename = "thinking")]
     Thinking {

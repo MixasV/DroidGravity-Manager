@@ -215,7 +215,7 @@ pub async fn handle_messages(
         clean_cache_control_from_messages(&mut request.messages);
         
         // 应用 Prompt Caching 标记以降低 token 消耗
-        use crate::proxy::mappers::claude::request::apply_cache_control_for_anthropic;
+        use crate::proxy::mappers::claude::apply_cache_control_for_anthropic;
         apply_cache_control_for_anthropic(&mut request.messages, &mut request.system);
         
         tracing::debug!("[{}] Applied Prompt Caching for Anthropic route", trace_id);

@@ -170,6 +170,85 @@ fn deep_clean_cache_control(value: &mut Value) {
     }
 }
 
+/// [PROMPT CACHING] 为 Anthropic 路由应用 cache_control
+/// 
+/// 这个函数会根据 Anthropic 的建议,在以下位置注入 cache_control: {"type": "ephemeral"}:
+/// 1. System Prompt (如果存在)
+/// 2. 最后一条 User/Assistant 消息
+/// 3. 倒数第三条消息 (如果上下文足够长)
+/// 
+/// 这样可以最大化利用 Anthropic 的 Prompt Caching 功能,降低 90% 的长对话成本。
+pub fn apply_cache_control_for_anthropic(messages: &mut [Message], system: &mut Option<SystemPrompt>) {
+    // 1. 系统提示词始终缓存
+    if let Some(sys) = system {
+        match sys {
+            SystemPrompt::String(_) => {
+                // 如果是字符串,转为 Array 格式以便添加 cache_control
+                let text = match std::mem::replace(sys, SystemPrompt::String(String::new())) {
+                    SystemPrompt::String(s) => s,
+                    _ => unreachable!(),
+                };
+                *sys = SystemPrompt::Array(vec![
+                    SystemBlock {
+                        block_type: "text".to_string(),
+                        text,
+                        cache_control: Some(json!({"type": "ephemeral"})),
+                    }
+                ]);
+            }
+            SystemPrompt::Array(blocks) => {
+                if let Some(last_block) = blocks.last_mut() {
+                    last_block.cache_control = Some(json!({"type": "ephemeral"}));
+                }
+            }
+        }
+    }
+
+    // 2. 消息历史缓存 (采用 3-point strategy)
+    let msg_len = messages.len();
+    if msg_len == 0 { return; }
+
+    // 始终缓存最后一条消息
+    if let Some(last_msg) = messages.last_mut() {
+        if let MessageContent::Array(blocks) = &mut last_msg.content {
+            if let Some(last_block) = blocks.last_mut() {
+                match last_block {
+                    ContentBlock::Text { .. } | ContentBlock::Thinking { .. } | ContentBlock::ToolUse { .. } => {
+                        // 通过反射或重新构造来设置 cache_control (具体取决于 models.rs 的结构)
+                        // 这里我们使用通用的 clean_cache_control 逻辑的反向操作
+                        set_block_cache_control(last_block);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // 如果消息够多,在中间位置也加一个缓存点 (例如倒数第 3 条)
+    if msg_len >= 3 {
+        if let Some(mid_msg) = messages.get_mut(msg_len - 3) {
+            if let MessageContent::Array(blocks) = &mut mid_msg.content {
+                if let Some(last_block) = blocks.last_mut() {
+                    set_block_cache_control(last_block);
+                }
+            }
+        }
+    }
+}
+
+/// 内部助手: 为 ContentBlock 设置 cache_control
+fn set_block_cache_control(block: &mut ContentBlock) {
+    let cache_val = Some(json!({"type": "ephemeral"}));
+    match block {
+        ContentBlock::Text { cache_control, .. } => *cache_control = cache_val,
+        ContentBlock::Thinking { cache_control, .. } => *cache_control = cache_val,
+        ContentBlock::Image { cache_control, .. } => *cache_control = cache_val,
+        ContentBlock::Document { cache_control, .. } => *cache_control = cache_val,
+        ContentBlock::ToolUse { cache_control, .. } => *cache_control = cache_val,
+        _ => {}
+    }
+}
+
 /// [FIX #564] Sort blocks in assistant messages to ensure thinking blocks are first
 /// 
 /// When context compression (kilo) reorders message blocks, thinking blocks may appear

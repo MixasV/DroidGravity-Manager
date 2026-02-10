@@ -849,7 +849,7 @@ impl TokenManager {
                         }
                     };
 
-                    return Ok((token.access_token, project_id, token.email, 0));
+                    return Ok((token.access_token, project_id, token.email, token.account_id, 0));
                 } else {
                     if is_rate_limited {
                         tracing::warn!("🔒 [FIX #820] Preferred account {} is rate-limited, falling back to round-robin", preferred_token.email);

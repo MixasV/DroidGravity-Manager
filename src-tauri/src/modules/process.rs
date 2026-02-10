@@ -712,8 +712,8 @@ pub fn start_antigravity() -> Result<(), String> {
         .and_then(|c| c.antigravity_executable.clone());
     let args = config.and_then(|c| c.antigravity_args.clone());
 
-    if let Some(mut path_str) = manual_path {
-        let mut path = std::path::PathBuf::from(&path_str);
+    if let Some(path_str) = manual_path {
+        let path = std::path::PathBuf::from(&path_str);
 
         #[cfg(target_os = "macos")]
         {
@@ -725,64 +725,19 @@ pub fn start_antigravity() -> Result<(), String> {
                         "检测到 macOS 路径位于 .app 内部，自动修正为: {}",
                         corrected_app
                     ));
-                    path_str = corrected_app.to_string();
-                    path = std::path::PathBuf::from(&path_str);
+                    // Re-bind since it needs a different value
+                    let path_str = corrected_app.to_string();
+                    let path = std::path::PathBuf::from(&path_str);
+                    
+                    if path.exists() {
+                        return start_with_path(path, path_str, args);
+                    }
                 }
             }
         }
 
         if path.exists() {
-            crate::modules::logger::log_info(&format!("使用手动配置路径启动: {}", path_str));
-
-            #[cfg(target_os = "macos")]
-            {
-                // macOS 下如果是 .app 目录，用 open
-                if path_str.ends_with(".app") || path.is_dir() {
-                    let mut cmd = Command::new("open");
-                    cmd.arg("-a").arg(&path_str);
-
-                    // 添加启动参数
-                    if let Some(ref args) = args {
-                        for arg in args {
-                            cmd.arg(arg);
-                        }
-                    }
-
-                    cmd.spawn().map_err(|e| format!("启动失败 (open): {}", e))?;
-                } else {
-                    let mut cmd = Command::new(&path_str);
-
-                    // 添加启动参数
-                    if let Some(ref args) = args {
-                        for arg in args {
-                            cmd.arg(arg);
-                        }
-                    }
-
-                    cmd.spawn()
-                        .map_err(|e| format!("启动失败 (direct): {}", e))?;
-                }
-            }
-
-            #[cfg(not(target_os = "macos"))]
-            {
-                let mut cmd = Command::new(&path_str);
-
-                // 添加启动参数
-                if let Some(ref args) = args {
-                    for arg in args {
-                        cmd.arg(arg);
-                    }
-                }
-
-                cmd.spawn().map_err(|e| format!("启动失败: {}", e))?;
-            }
-
-            crate::modules::logger::log_info(&format!(
-                "Antigravity 启动命令已发送 (手动路径: {}, 参数: {:?})",
-                path_str, args
-            ));
-            return Ok(());
+            return start_with_path(path, path_str, args);
         } else {
             crate::modules::logger::log_warn(&format!(
                 "手动配置路径不存在: {}，将回退到自动检测",

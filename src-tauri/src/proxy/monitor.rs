@@ -163,8 +163,18 @@ impl ProxyMonitor {
             }
         });
 
-        // Emit event (send summary only, without body to reduce memory)
+        // Emit event (send summary with truncated body to show in UI)
         if let Some(app) = &self.app_handle {
+            let truncate_body = |body: &Option<String>| -> Option<String> {
+                body.as_ref().map(|s| {
+                    if s.len() > 2000 {
+                        format!("{}...", &s[..2000])
+                    } else {
+                        s.clone()
+                    }
+                })
+            };
+
             let log_summary = ProxyRequestLog {
                 id: log.id.clone(),
                 timestamp: log.timestamp,
@@ -177,8 +187,8 @@ impl ProxyMonitor {
                 account_email: log.account_email.clone(),
                 client_ip: log.client_ip.clone(),
                 error: log.error.clone(),
-                request_body: None,  // Don't send body in event
-                response_body: None, // Don't send body in event
+                request_body: truncate_body(&log.request_body),
+                response_body: truncate_body(&log.response_body),
                 input_tokens: log.input_tokens,
                 output_tokens: log.output_tokens,
                 cached_tokens: log.cached_tokens,

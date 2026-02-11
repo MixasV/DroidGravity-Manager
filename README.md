@@ -4,9 +4,22 @@
 > **DO NOT SYNC WITH UPSTREAM (lbjlaq/Antigravity-Manager)!**
 > This is a separate standalone project. Syncing with upstream will overwrite Droid-specific changes and localized branding.
 
-**Version 1.1.4**
+**Version 1.2.8**
 
 A fork of [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager) with **Factory Droid** support for seamless integration with Google Gemini and Anthropic Claude models.
+
+## 🌟 What's New in v1.2.8
+
+- **Claude Opus 4.6 Support**: Full compatibility with the latest `claude-opus-4-6-thinking` model. Automatic redirection from legacy Opus 4.5/4.0 IDs.
+- **Progressive Context Compression**: Implemented 3-layer progressive compression (Tool trimming, Thinking purification, XML summary) to handle massive contexts up to 2M tokens.
+- **Interrupted Session Recovery**: Improved "Heal Session" logic that automatically closes broken tool loops. You can now continue your chat even if the previous response was cut off.
+- **Fake 200 Error Detection**: The proxy now detects model deprecation notices (e.g., "switch to 4.6") hidden inside successful responses and triggers automatic account rotation.
+- **Restored Prompt Caching**: Re-enabled Anthropic's Prompt Caching (`cache_control`), reducing token costs by up to 90% for long conversations.
+- **Robust Error Handling**:
+  - Fixed **Error 400** caused by incorrect `thoughtSignature` nesting in Gemini API.
+  - Added account rotation for **404 NOT_FOUND** (Google Resource missing) errors.
+  - Eliminated "undefined is not an object" UI crashes during token usage reporting.
+- **Enhanced Monitoring**: Restored Request/Response payload visibility in the Monitor Dashboard with safe truncation for large streams.
 
 ## 🌟 What's New in v1.1.4
 
@@ -105,6 +118,17 @@ The compiled application will be in `src-tauri/target/release/`.
       "maxOutputTokens": 8192,
       "noImageSupport": false,
       "provider": "anthropic"
+    },
+    {
+      "model": "claude-opus-4-6-thinking",
+      "id": "claude-opus-4-6-thinking-8",
+      "index": 8,
+      "baseUrl": "http://127.0.0.1:8045",
+      "apiKey": "YOUR_DROIDGRAVITY_API_KEY_HERE",
+      "displayName": "Claude 4.6 Opus",
+      "maxOutputTokens": 8192,
+      "noImageSupport": false,
+      "provider": "anthropic"
     }
   ]
 }
@@ -146,7 +170,8 @@ The compiled application will be in `src-tauri/target/release/`.
 **Anthropic Claude**:
 - Claude 4.5 Sonnet
 - Claude 4.5 Sonnet (Thinking)
-- Claude 4.5 Opus (Thinking)
+- Claude 4.6 Opus (Thinking) [Recommended]
+- Claude 3.5 Sonnet & Haiku (Via Legacy IDs)
 
 ### Factory Droid Integration
 
@@ -201,6 +226,17 @@ Default port is `8045`. To change:
 ---
 
 ## 📝 Changelog
+
+### Version 1.2.8 (2026-02-11)
+
+- ✨ **Opus 4.6 Migration**: Added native support for `claude-opus-4-6-thinking`.
+- 🔄 **Smart Model Mapping**: Automatically reroutes legacy Opus 4.5 requests to 4.6 to prevent "Model Unavailable" errors.
+- 🛡️ **Fake 200 Guard**: Implemented stream content parsing to detect deprecation notices and trigger account rotation.
+- 🩹 **Heal Session Logic**: Added "Closed Loop" recovery for interrupted thinking blocks, allowing session continuation after cutoffs.
+- ⚡ **Prompt Caching Restoration**: Re-integrated `cache_control` into the request flow for massive token savings.
+- 🐛 **UI Stability**: Resolved "Error: undefined is not an object (evaluating '$.input_tokens')" in the dashboard.
+- 📊 **Monitor Visibility**: Re-enabled Request/Response body previews in the live monitor.
+- 🌍 **Localization**: Updated update notifications and UI labels to English (from Chinese).
 
 ### Version 1.1.4 (2026-02-02)
 

@@ -130,7 +130,7 @@ function CurrentAccount({ account, onSwitch }: CurrentAccountProps) {
                 {claudeModel && (
                     <div className="space-y-1.5">
                         <div className="flex justify-between items-baseline">
-                            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Claude 4.5</span>
+                            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Claude 4.6</span>
                             <div className="flex items-center gap-2">
                                 <span className="text-[10px] text-gray-400 dark:text-gray-500" title={`${t('accounts.reset_time')}: ${new Date(claudeModel.reset_time).toLocaleString()}`}>
                                     {claudeModel.reset_time ? `R: ${formatTimeRemaining(claudeModel.reset_time)}` : t('common.unknown')}

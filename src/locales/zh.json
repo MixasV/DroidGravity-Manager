@@ -502,8 +502,8 @@
             "gemini3_option_flash": "gemini-3-flash (快速)",
             "groups": {
                 "claude_45": {
-                    "name": "Claude 4.5 系列",
-                    "desc": "Opus 4.5, Sonnet 4.5 (推理)"
+                    "name": "Claude 4.6 系列",
+                    "desc": "Opus 4.6, Sonnet 4.5 (推理)"
                 },
                 "claude_35": {
                     "name": "Claude 3.5 系列",

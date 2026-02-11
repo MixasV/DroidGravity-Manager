@@ -232,7 +232,7 @@ function AccountCard({ account, selected, onSelect, isCurrent, isRefreshing, isS
                                     />
                                 )}
                                 <div className="relative z-10 w-full flex items-center text-[9px] font-mono leading-none whitespace-nowrap">
-                                    <span className="w-[46px] text-gray-500 dark:text-gray-400 font-bold truncate pr-0.5" title="Claude-sonnet-4.5">Claude 4.5</span>
+                                    <span className="w-[46px] text-gray-500 dark:text-gray-400 font-bold truncate pr-0.5" title="Claude-sonnet-4.6">Claude 4.6</span>
                                     <div className="flex-1 flex justify-center overflow-hidden">
                                         {claudeModel?.reset_time ? (
                                             <span className={cn("flex items-center gap-0.5 font-medium transition-colors whitespace-nowrap", getTimeColorClass(claudeModel.reset_time))}>

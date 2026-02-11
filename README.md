@@ -4,13 +4,14 @@
 > **DO NOT SYNC WITH UPSTREAM (lbjlaq/Antigravity-Manager)!**
 > This is a separate standalone project. Syncing with upstream will overwrite Droid-specific changes and localized branding.
 
-**Version 1.2.8**
+**Version 1.2.9**
 
 A fork of [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager) with **Factory Droid** support for seamless integration with Google Gemini and Anthropic Claude models.
 
-## 🌟 What's New in v1.2.8
+## 🌟 What's New in v1.2.9
 
 - **Claude Opus 4.6 Support**: Full compatibility with the latest `claude-opus-4-6-thinking` model. Automatic redirection from legacy Opus 4.5/4.0 IDs.
+- **Improved Rotation Logic**: Fixed a bug where **404 NOT_FOUND** (Google Resource missing) errors didn't trigger account rotation. Now it instantly switches to the next working account.
 - **Progressive Context Compression**: Implemented 3-layer progressive compression (Tool trimming, Thinking purification, XML summary) to handle massive contexts up to 2M tokens.
 - **Interrupted Session Recovery**: Improved "Heal Session" logic that automatically closes broken tool loops. You can now continue your chat even if the previous response was cut off.
 - **Fake 200 Error Detection**: The proxy now detects model deprecation notices (e.g., "switch to 4.6") hidden inside successful responses and triggers automatic account rotation.
@@ -227,16 +228,14 @@ Default port is `8045`. To change:
 
 ## 📝 Changelog
 
-### Version 1.2.8 (2026-02-11)
+### Version 1.2.9 (2026-02-11)
 
-- ✨ **Opus 4.6 Migration**: Added native support for `claude-opus-4-6-thinking`.
-- 🔄 **Smart Model Mapping**: Automatically reroutes legacy Opus 4.5 requests to 4.6 to prevent "Model Unavailable" errors.
-- 🛡️ **Fake 200 Guard**: Implemented stream content parsing to detect deprecation notices and trigger account rotation.
-- 🩹 **Heal Session Logic**: Added "Closed Loop" recovery for interrupted thinking blocks, allowing session continuation after cutoffs.
-- ⚡ **Prompt Caching Restoration**: Re-integrated `cache_control` into the request flow for massive token savings.
-- 🐛 **UI Stability**: Resolved "Error: undefined is not an object (evaluating '$.input_tokens')" in the dashboard.
-- 📊 **Monitor Visibility**: Re-enabled Request/Response body previews in the live monitor.
-- 🌍 **Localization**: Updated update notifications and UI labels to English (from Chinese).
+- ✨ **Account Rotation Fix**: Added **404 NOT_FOUND** error detection to `should_rotate_account` logic.
+- 🔄 **Opus 4.6 Migration**: Full support for native `claude-opus-4-6-thinking`.
+- ✨ **UI Updates**: All references updated from Claude 4.5 to **Claude 4.6 Opus**.
+- 🩹 **Heal Session Logic**: Enhanced recovery for interrupted thinking/tool streams.
+- ⚡ **Prompt Caching**: Restored `cache_control` integration.
+- 📊 **Monitor Dashboard**: Restored Payloads and fixed token usage UI crashes.
 
 ### Version 1.1.4 (2026-02-02)
 

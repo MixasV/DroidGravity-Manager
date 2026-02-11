@@ -133,7 +133,7 @@ pub async fn apply_retry_strategy(
 pub fn should_rotate_account(status_code: u16) -> bool {
     match status_code {
         // 这些错误是账号级别或特定节点配额的，需要轮换
-        429 | 401 | 403 | 500 => true,
+        404 | 429 | 401 | 403 | 500 => true,
         // 这些错误通常是协议或服务端全局性、甚至参数错误的，轮换账号通常无意义
         400 | 503 | 529 => false,
         _ => false,

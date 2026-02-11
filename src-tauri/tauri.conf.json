@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DroidGravity Manager",
+  "productName": "DroidGravity-Manager",
   "version": "1.3.0",
   "identifier": "com.mixasv.droidgravity-manager",
   "build": {

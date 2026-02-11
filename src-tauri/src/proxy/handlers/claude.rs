@@ -811,6 +811,27 @@ pub async fn handle_messages(
                             }
                             
                             let text = String::from_utf8_lossy(&bytes);
+                            
+                            // [CRITICAL] Detection of "Fake 200" errors (Deprecation messages)
+                            // If the response contains a migration notice instead of actual AI content,
+                            // we must rotate the account.
+                            if text.contains("is no longer available") && (text.contains("Claude Opus") || text.contains("4.5")) {
+                                tracing::error!("[{}] Detected Opus deprecation message in stream. Rotating account.", trace_id);
+                                last_error = "Model deprecated/unavailable notice detected in response content".to_string();
+                                
+                                // Explicitly block this account for this model
+                                token_manager.mark_rate_limited_async(
+                                    &email, 
+                                    429, 
+                                    None, 
+                                    "Model version deprecated notice detected", 
+                                    Some(&request_with_mapped.model)
+                                ).await;
+                                
+                                retry_this_account = true;
+                                break;
+                            }
+
                             // Skip SSE comments/pings
                             if text.trim().starts_with(":") {
                                 debug!("[{}] Skipping peek heartbeat: {}", trace_id, text.trim());

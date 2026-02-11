@@ -106,7 +106,26 @@ pub async fn handle_generate(
 
         // 5. 包装请求 (project injection)
         // [FIX #765] Pass session_id to wrap_request for signature injection
-        let wrapped_body = wrap_request(&body, &project_id, &mapped_model, Some(&session_id));
+        let mut wrapped_body = wrap_request(&body, &project_id, &mapped_model, Some(&session_id));
+
+        // [NEW v1.3.2] Inject Safety Settings (BLOCK_NONE) to prevent "lazy" responses
+        if let Some(obj) = wrapped_body.as_object_mut() {
+            obj.insert("safetySettings".to_string(), serde_json::json!([
+                { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE" },
+                { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE" },
+                { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE" },
+                { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE" },
+                { "category": "HARM_CATEGORY_CIVIC_INTEGRITY", "threshold": "BLOCK_NONE" },
+            ]));
+            
+            // Ensure high-quality generation config
+            let gen_config = obj.entry("generationConfig").or_insert_with(|| serde_json::json!({}));
+            if let Some(gc_obj) = gen_config.as_object_mut() {
+                if !gc_obj.contains_key("topP") {
+                    gc_obj.insert("topP".to_string(), serde_json::json!(0.95));
+                }
+            }
+        }
 
         if debug_logger::is_enabled(&debug_cfg) {
             let payload = json!({

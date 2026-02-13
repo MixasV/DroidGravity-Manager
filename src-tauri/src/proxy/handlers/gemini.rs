@@ -402,10 +402,22 @@ pub async fn handle_generate(
                 .await;
         }
 
+        // [FIX] 优化重试逻辑：如果决定轮换账号，则跳过长时间的退避睡眠
+        let should_rotate = should_rotate_account(status_code);
+        
+        if should_rotate && attempt + 1 < max_attempts {
+            info!(
+                "[{}] 🔄 Fast rotation triggered for status {} (Attempt {}/{}) - Skipping backoff", 
+                trace_id, status_code, attempt + 1, max_attempts
+            );
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            continue;
+        }
+
         // 执行退避
         if apply_retry_strategy(strategy, attempt, max_attempts, status_code, &trace_id_limit).await {
             // 判断是否需要轮换账号
-            if !should_rotate_account(status_code) {
+            if !should_rotate {
                 debug!("[{}] Keeping same account for status {} (Gemini server-side issue)", trace_id, status_code);
             }
             continue;

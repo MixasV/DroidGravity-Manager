@@ -1774,27 +1774,29 @@ impl TokenManager {
     /// 4. 兜底: 指数退避策略 → 默认锁定时间
     ///
     /// # 参数
-    /// - `email`: 账号邮箱,用于查找账号信息
+    /// - `account_id`: 账号 ID,用于锁定记录的 Key
+    /// - `email`: 账号邮箱,用于实时刷新配额
     /// - `status`: HTTP 状态码（如 429、500 等）
     /// - `retry_after_header`: 可选的 Retry-After 响应头
     /// - `error_body`: 错误响应体,用于解析 quotaResetDelay
     /// - `model`: 可选的模型名称,用于模型级别限流
     pub async fn mark_rate_limited_async(
         &self,
+        account_id: &str,
         email: &str,
         status: u16,
         retry_after_header: Option<&str>,
         error_body: &str,
         model: Option<&str>, // 🆕 新增模型参数
     ) {
-        // [NEW] 检查熔断是否启用
+        // [FIX] 即使熔断器被禁用，对于明确的配额耗尽 (429) 或严重错误，我们仍应记录限流
+        // 否则会导致无限重试同一个坏掉的账号 (Issue #RetryLoop)
         let config = self.circuit_breaker_config.read().clone();
         if !config.enabled {
-            return;
+            tracing::warn!("Circuit breaker is disabled in config, but processing rate limit for {} to prevent retry loop", email);
         }
 
-        // [FIX] Convert email to account_id for consistent tracking
-        let account_id = self.email_to_account_id(email).unwrap_or_else(|| email.to_string());
+        tracing::info!("[RateLimit] Marking account {} ({}) as limited - status: {}, model: {:?}", account_id, email, status, model);
 
         // 检查 API 是否返回了精确的重试时间
         let has_explicit_retry_time = retry_after_header.is_some() ||
@@ -1803,19 +1805,14 @@ impl TokenManager {
         if has_explicit_retry_time {
             // API 返回了精确时间(quotaResetDelay),直接使用,无需实时刷新
             if let Some(m) = model {
-                tracing::debug!(
-                    "账号 {} 的模型 {} 的 429 响应包含 quotaResetDelay,直接使用 API 返回的时间",
+                tracing::info!(
+                    "[RateLimit] Account {} model {} has explicit quotaResetDelay. Locking.",
                     account_id,
                     m
                 );
-            } else {
-                tracing::debug!(
-                    "账号 {} 的 429 响应包含 quotaResetDelay,直接使用 API 返回的时间",
-                    account_id
-                );
             }
             self.rate_limit_tracker.parse_from_error(
-                &account_id,
+                account_id,
                 status,
                 retry_after_header,
                 error_body,
@@ -1850,14 +1847,15 @@ impl TokenManager {
             );
         }
 
-        // [FIX] 传入 email 而不是 account_id，因为 fetch_and_lock_with_realtime_quota 期望 email
+        // [FIX] 传入 email 用于 API 调用，但锁定使用 account_id
+        // fetch_and_lock_with_realtime_quota 内部会使用 email 查找 token，然后使用 account_id 锁定
         if self.fetch_and_lock_with_realtime_quota(email, reason, model.map(|s| s.to_string())).await {
             tracing::info!("账号 {} 已使用实时配额精确锁定", email);
             return;
         }
 
         // 实时刷新失败,尝试使用本地缓存的配额刷新时间
-        if self.set_precise_lockout(&account_id, reason, model.map(|s| s.to_string())) {
+        if self.set_precise_lockout(account_id, reason, model.map(|s| s.to_string())) {
             tracing::info!("账号 {} 已使用本地缓存配额锁定", account_id);
             return;
         }
@@ -1865,7 +1863,7 @@ impl TokenManager {
         // 都失败了,回退到指数退避策略
         tracing::warn!("账号 {} 无法获取配额刷新时间,使用指数退避策略", account_id);
         self.rate_limit_tracker.parse_from_error(
-            &account_id,
+            account_id,
             status,
             retry_after_header,
             error_body,

@@ -1521,21 +1521,15 @@ impl TokenManager {
 
     /// 检查账号是否在限流中 (支持模型级)
     pub async fn is_rate_limited(&self, account_id: &str, model: Option<&str>) -> bool {
-        // [NEW] 检查熔断是否启用
-        let config = self.circuit_breaker_config.read();
-        if !config.enabled {
-            return false;
-        }
+        // [FIX] 即使熔断器配置被禁用，我们也必须检查限流状态
+        // 因为对于 429/5xx 等严重错误，我们在 mark_rate_limited_async 中强制记录了限流
+        // 如果这里因为 config.enabled=false 就返回 false，会导致这些已被标记的坏账号被再次选中，形成死循环
         self.rate_limit_tracker.is_rate_limited(account_id, model)
     }
 
     /// [NEW] 检查账号是否在限流中 (同步版本，仅用于 Iterator)
     pub fn is_rate_limited_sync(&self, account_id: &str, model: Option<&str>) -> bool {
-        // 同步版本读取 parking_lot RwLock 没问题
-        let config = self.circuit_breaker_config.read();
-        if !config.enabled {
-            return false;
-        }
+        // [FIX] 同步版本也需移除 config.enabled 检查，原因同上
         self.rate_limit_tracker.is_rate_limited(account_id, model)
     }
 

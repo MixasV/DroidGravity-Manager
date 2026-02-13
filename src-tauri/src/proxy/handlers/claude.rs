@@ -821,6 +821,7 @@ pub async fn handle_messages(
                                 
                                 // Explicitly block this account for this model
                                 token_manager.mark_rate_limited_async(
+                                    &account_id,
                                     &email, 
                                     429, 
                                     None, 
@@ -958,6 +959,7 @@ pub async fn handle_messages(
                     
                     // Mark account as quota-exhausted to trigger rotation
                     token_manager.mark_rate_limited_async(
+                        &account_id,
                         &email, 
                         429, // Treat as quota error
                         None, 
@@ -1036,7 +1038,7 @@ pub async fn handle_messages(
         // 3. 标记限流状态(用于 UI 显示) - 使用异步版本以支持实时配额刷新
         // 🆕 传入实际使用的模型,实现模型级别限流,避免不同模型配额互相影响
         if status_code == 404 || status_code == 429 || status_code == 529 || status_code == 503 || status_code == 500 {
-            token_manager.mark_rate_limited_async(&email, status_code, retry_after.as_deref(), &error_text, Some(&request_with_mapped.model)).await;
+            token_manager.mark_rate_limited_async(&account_id, &email, status_code, retry_after.as_deref(), &error_text, Some(&request_with_mapped.model)).await;
             
             // [FIX] 404 Project Not Found: 强制清除 project_id 并触发轮换
             if status_code == 404 && error_text.contains("projects/") {

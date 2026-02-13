@@ -393,6 +393,7 @@ pub async fn handle_generate(
         if status_code == 429 || status_code == 529 || status_code == 503 || status_code == 500 {
             token_manager
                 .mark_rate_limited_async(
+                    &_account_id, // Use the correct variable name for account ID (was _account_id from destructuring)
                     &email,
                     status_code,
                     retry_after.as_deref(),

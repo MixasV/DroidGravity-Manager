@@ -459,6 +459,7 @@ pub async fn handle_chat_completions(
             // [FIX] Use async version with model parameter for fine-grained rate limiting
             token_manager
                 .mark_rate_limited_async(
+                    &account_id,
                     &email,
                     status_code,
                     _retry_after.as_deref(),

@@ -320,12 +320,10 @@ pub fn create_openai_sse_stream(
                                                 });
 
                                                 // [FIX] 将 usage 嵌入到 chunk 中
-                                                if let Some(ref usage) = final_usage {
-                                                    openai_chunk["usage"] = serde_json::to_value(usage).unwrap();
-                                                }
-
-                                                // [FIX] 如果是最后一个 chunk,标记 usage 已发送
                                                 if finish_reason.is_some() {
+                                                    if let Some(ref usage) = final_usage {
+                                                        openai_chunk["usage"] = serde_json::to_value(usage).unwrap();
+                                                    }
                                                     final_usage = None;
                                                 }
 
@@ -498,12 +496,10 @@ pub fn create_legacy_sse_stream(
                                     });
 
                                     // [FIX] 将 usage 嵌入到 chunk 中
-                                    if let Some(ref usage) = final_usage {
-                                        legacy_chunk["usage"] = serde_json::to_value(usage).unwrap();
-                                    }
-
-                                    // [FIX] 如果是最后一个 chunk,标记 usage 已发送
                                     if finish_reason.is_some() {
+                                        if let Some(ref usage) = final_usage {
+                                            legacy_chunk["usage"] = serde_json::to_value(usage).unwrap();
+                                        }
                                         final_usage = None;
                                     }
 

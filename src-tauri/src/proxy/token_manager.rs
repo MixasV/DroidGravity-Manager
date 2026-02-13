@@ -1354,6 +1354,31 @@ impl TokenManager {
         Ok(())
     }
 
+    /// [NEW] 清除账号的 project_id (用于处理 404 projects/... not found 错误)
+    pub async fn clear_project_id(&self, account_id: &str) -> Result<(), String> {
+        if let Some(mut entry) = self.tokens.get_mut(account_id) {
+            entry.project_id = None;
+            let path = entry.account_path.clone();
+
+            let mut content: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(&path).map_err(|e| format!("读取文件失败: {}", e))?,
+            )
+            .map_err(|e| format!("解析 JSON 失败: {}", e))?;
+
+            if let Some(token_obj) = content.get_mut("token").and_then(|t| t.as_object_mut()) {
+                token_obj.remove("project_id");
+            }
+
+            std::fs::write(&path, serde_json::to_string_pretty(&content).unwrap())
+                .map_err(|e| format!("写入文件失败: {}", e))?;
+
+            tracing::info!("♻️ Cleared project_id for account {} due to 404 error", account_id);
+            Ok(())
+        } else {
+            Err("账号不存在".to_string())
+        }
+    }
+
     /// 保存刷新后的 token 到账号文件
     async fn save_refreshed_token(&self, account_id: &str, token_response: &crate::modules::oauth::TokenResponse) -> Result<(), String> {
         let entry = self.tokens.get(account_id)

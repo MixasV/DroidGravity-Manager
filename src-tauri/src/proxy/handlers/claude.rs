@@ -1037,6 +1037,17 @@ pub async fn handle_messages(
         // 🆕 传入实际使用的模型,实现模型级别限流,避免不同模型配额互相影响
         if status_code == 404 || status_code == 429 || status_code == 529 || status_code == 503 || status_code == 500 {
             token_manager.mark_rate_limited_async(&email, status_code, retry_after.as_deref(), &error_text, Some(&request_with_mapped.model)).await;
+            
+            // [FIX] 404 Project Not Found: 强制清除 project_id 并触发轮换
+            if status_code == 404 && error_text.contains("projects/") {
+                tracing::warn!("[Claude] 404 Project Not Found detected for {}, clearing project_id", email);
+                let _ = token_manager.clear_project_id(&account_id).await;
+                
+                // 强制轮换：虽然 strategy 会返回 FixedDelay，但我们通过 continue 结合 force_rotate_token 进入下一次循环
+                if apply_retry_strategy(RetryStrategy::FixedDelay(Duration::from_millis(100)), attempt, max_attempts, status_code, &trace_id).await {
+                    continue;
+                }
+            }
         }
 
         // 4. 处理 400 错误 (Thinking 签名失效 或 块顺序错误)

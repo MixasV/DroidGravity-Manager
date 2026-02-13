@@ -160,7 +160,7 @@ pub async fn handle_chat_completions(
 
         // 4. 获取 Token (使用准确的 request_type)
         // 关键：在重试尝试 (attempt > 0) 时强制轮换账号
-        let (access_token, project_id, email, _account_id, _wait_ms) = match token_manager
+        let (access_token, project_id, email, account_id, _wait_ms) = match token_manager
             .get_token(
                 &config.request_type,
                 attempt > 0,
@@ -1397,6 +1397,7 @@ pub async fn handle_completions(
         if status_code == 429 || status_code == 529 || status_code == 503 || status_code == 500 {
             token_manager
                 .mark_rate_limited_async(
+                    &_account_id,
                     &email,
                     status_code,
                     retry_after.as_deref(),

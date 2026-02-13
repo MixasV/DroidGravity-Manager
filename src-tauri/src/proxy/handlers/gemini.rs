@@ -511,7 +511,7 @@ pub async fn handle_get_model(Path(model_name): Path<String>) -> impl IntoRespon
 
 pub async fn handle_count_tokens(State(state): State<AppState>, Path(_model_name): Path<String>, Json(_body): Json<Value>) -> Result<impl IntoResponse, (StatusCode, String)> {
     let model_group = "gemini";
-    let (_access_token, _project_id, _, _acc_id, _wait_ms) = state.token_manager.get_token(model_group, false, None, "gemini").await
+    let (_access_token, _project_id, _, _acc_id, _wait_ms) = state.token_manager.get_token(model_group, false, None, "gemini", None).await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, format!("Token error: {}", e)))?;
     
     Ok(Json(json!({"totalTokens": 0})))

@@ -1672,7 +1672,7 @@ async fn call_gemini_sync(
 ) -> Result<String, String> {
     // Get token and transform request
     let (access_token, project_id, _, _acc_id, _wait_ms) = token_manager
-        .get_token("gemini", false, None, model)
+        .get_token("gemini", false, None, model, None)
         .await
         .map_err(|e| format!("Failed to get account: {}", e))?;
     

@@ -1553,7 +1553,7 @@ pub async fn handle_images_generations(
     let token_manager = state.token_manager;
 
     let (access_token, project_id, email, _account_id, _wait_ms) = match token_manager
-        .get_token("image_gen", false, None, "dall-e-3")
+        .get_token("image_gen", false, None, "dall-e-3", None)
         .await
     {
         Ok(t) => t,
@@ -1825,7 +1825,7 @@ pub async fn handle_images_edits(
     let upstream = state.upstream.clone();
     let token_manager = state.token_manager;
     let (access_token, project_id, email, _account_id, _wait_ms) = match token_manager
-        .get_token("image_gen", false, None, "dall-e-3")
+        .get_token("image_gen", false, None, "dall-e-3", None)
         .await
     {
         Ok(t) => t,

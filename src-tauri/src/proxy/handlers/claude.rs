@@ -400,6 +400,10 @@ pub async fn handle_messages(
     let mut last_mapped_model: Option<String> = None;
     let mut last_status = StatusCode::SERVICE_UNAVAILABLE; // Default to 503 if no response reached
     
+    // [FIX] 严格排除列表：记录在本次请求中已经失败过的账号ID
+    // 传递给 token_manager 以防止重试时再次选中它们
+    let mut failed_accounts = std::collections::HashSet::new();
+
     for attempt in 0..max_attempts {
         // 2. 模型路由解析
         let mut mapped_model = crate::proxy::common::model_mapping::resolve_model_route(
@@ -434,7 +438,13 @@ pub async fn handle_messages(
         });
 
         let force_rotate_token = attempt > 0;
-        let (access_token, project_id, email, account_id, _wait_ms) = match token_manager.get_token(&config.request_type, force_rotate_token, session_id, &config.final_model).await {
+        let (access_token, project_id, email, account_id, _wait_ms) = match token_manager.get_token(
+            &config.request_type, 
+            force_rotate_token, 
+            session_id, 
+            &config.final_model,
+            Some(&failed_accounts) // [FIX] 传入黑名单
+        ).await {
             Ok(t) => t,
             Err(e) => {
                 let safe_message = if e.contains("invalid_grant") {
@@ -1039,6 +1049,9 @@ pub async fn handle_messages(
         // 🆕 传入实际使用的模型,实现模型级别限流,避免不同模型配额互相影响
         if status_code == 404 || status_code == 429 || status_code == 529 || status_code == 503 || status_code == 500 {
             token_manager.mark_rate_limited_async(&account_id, &email, status_code, retry_after.as_deref(), &error_text, Some(&request_with_mapped.model)).await;
+            
+            // [FIX] 将此账号加入本地黑名单，防止在同一请求的重试中再次被选中
+            failed_accounts.insert(account_id.clone());
             
             // [FIX] 404 Project Not Found: 强制清除 project_id 并触发轮换
             if status_code == 404 && error_text.contains("projects/") {

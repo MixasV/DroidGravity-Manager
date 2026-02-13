@@ -133,6 +133,9 @@ pub async fn handle_chat_completions(
         &openai_req.model,
         &*state.custom_mapping.read().await,
     );
+    
+    // [FIX] 严格排除列表
+    let mut failed_accounts = std::collections::HashSet::new();
 
     for attempt in 0..max_attempts {
         // 将 OpenAI 工具转为 Value 数组以便探测联网
@@ -166,6 +169,7 @@ pub async fn handle_chat_completions(
                 attempt > 0,
                 Some(&session_id),
                 &mapped_model,
+                Some(&failed_accounts), // [FIX] 传入黑名单
             )
             .await
         {
@@ -467,6 +471,9 @@ pub async fn handle_chat_completions(
                     Some(&mapped_model),
                 )
                 .await;
+            
+            // [FIX] 将此账号加入本地黑名单
+            failed_accounts.insert(account_id.clone());
         }
 
         // [FIX] 优化重试逻辑：如果决定轮换账号，则跳过长时间的退避睡眠
@@ -1038,6 +1045,9 @@ pub async fn handle_completions(
         &*state.custom_mapping.read().await,
     );
     let trace_id = format!("req_{}", chrono::Utc::now().timestamp_subsec_millis());
+    
+    // [FIX] 严格排除列表
+    let mut failed_accounts = std::collections::HashSet::new();
 
     for attempt in 0..max_attempts {
         // 3. 模型配置解析
@@ -1068,6 +1078,7 @@ pub async fn handle_completions(
                 force_rotate,
                 session_id,
                 &mapped_model,
+                Some(&failed_accounts), // [FIX] 传入黑名单
             )
             .await
         {
@@ -1405,6 +1416,9 @@ pub async fn handle_completions(
                     Some(&mapped_model),
                 )
                 .await;
+            
+            // [FIX] 将此账号加入本地黑名单
+            failed_accounts.insert(_account_id.clone());
         }
 
         // 确定重试策略

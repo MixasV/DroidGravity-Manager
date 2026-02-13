@@ -649,12 +649,14 @@ impl TokenManager {
     /// 参数 `force_rotate` 为 true 时将忽略锁定，强制切换账号
     /// 参数 `session_id` 用于跨请求维持会话粘性
     /// 参数 `target_model` 用于检查配额保护 (Issue #621)
+    /// 参数 `excluded_accounts` 用于本次请求必须排除的账号 ID (防止重试时死循环)
     pub async fn get_token(
         &self,
         quota_group: &str,
         force_rotate: bool,
         session_id: Option<&str>,
         target_model: &str,
+        excluded_accounts: Option<&HashSet<String>>,
     ) -> Result<(String, String, String, String, u64), String> {
         // [FIX] 检查并处理待重新加载的账号（配额保护同步）
         let pending_accounts = crate::proxy::server::take_pending_reload_accounts();
@@ -673,7 +675,7 @@ impl TokenManager {
         let timeout_duration = std::time::Duration::from_secs(5);
         match tokio::time::timeout(
             timeout_duration,
-            self.get_token_internal(quota_group, force_rotate, session_id, target_model),
+            self.get_token_internal(quota_group, force_rotate, session_id, target_model, excluded_accounts),
         )
         .await
         {
@@ -691,6 +693,7 @@ impl TokenManager {
         force_rotate: bool,
         session_id: Option<&str>,
         target_model: &str,
+        excluded_accounts: Option<&HashSet<String>>,
     ) -> Result<(String, String, String, String, u64), String> {
         let mut tokens_snapshot: Vec<ProxyToken> =
             self.tokens.iter().map(|e| e.value().clone()).collect();
@@ -698,6 +701,34 @@ impl TokenManager {
         if total == 0 {
             return Err("Token pool is empty".to_string());
         }
+
+        // [FIX #StrictExclusion] 预过滤：移除所有在 excluded_accounts 中的账号
+        // 这样可以确保无论后续逻辑如何（粘性、Mode B、Round Robin），都不会选中已失败的账号
+        if let Some(excluded) = excluded_accounts {
+            if !excluded.is_empty() {
+                let before_len = tokens_snapshot.len();
+                tokens_snapshot.retain(|t| !excluded.contains(&t.account_id));
+                let after_len = tokens_snapshot.len();
+                
+                if before_len != after_len {
+                    tracing::debug!(
+                        "🚫 [Strict Exclusion] Filtered out {} failed account(s) from pool (remaining: {})", 
+                        before_len - after_len, 
+                        after_len
+                    );
+                }
+                
+                if tokens_snapshot.is_empty() {
+                    return Err(format!(
+                        "All accounts exhausted ({} excluded by retry logic). Please wait for rotation or reset.", 
+                        excluded.len()
+                    ));
+                }
+            }
+        }
+        
+        // 更新 total 为过滤后的数量
+        let total = tokens_snapshot.len();
 
         // ===== 【优化】根据订阅等级、健康分、刷新时间、剩余配额排序 =====
         // 优先级: 订阅等级 > 健康分 > 刷新时间（越近越优先）> 剩余配额

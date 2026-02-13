@@ -61,6 +61,9 @@ pub async fn handle_generate(
     
     let mut last_error = String::new();
     let mut last_email: Option<String> = None;
+    
+    // [FIX] 严格排除列表
+    let mut failed_accounts = std::collections::HashSet::new();
 
     for attempt in 0..max_attempts {
         // 3. 模型路由解析
@@ -94,7 +97,13 @@ pub async fn handle_generate(
         let session_id = SessionManager::extract_gemini_session_id(&body, &model_name);
 
         // 关键：在重试尝试 (attempt > 0) 时强制轮换账号
-        let (access_token, project_id, email, _account_id, _wait_ms) = match token_manager.get_token(&config.request_type, attempt > 0, Some(&session_id), &config.final_model).await {
+        let (access_token, project_id, email, _account_id, _wait_ms) = match token_manager.get_token(
+            &config.request_type, 
+            attempt > 0, 
+            Some(&session_id), 
+            &config.final_model,
+            Some(&failed_accounts) // [FIX] 传入黑名单
+        ).await {
             Ok(t) => t,
             Err(e) => {
                 return Err((StatusCode::SERVICE_UNAVAILABLE, format!("Token error: {}", e)));
@@ -401,6 +410,9 @@ pub async fn handle_generate(
                     Some(&mapped_model),
                 )
                 .await;
+            
+            // [FIX] 将此账号加入本地黑名单
+            failed_accounts.insert(_account_id.clone());
         }
 
         // [FIX] 优化重试逻辑：如果决定轮换账号，则跳过长时间的退避睡眠

@@ -982,6 +982,9 @@ impl TokenManager {
                 // 若无锁定，则轮询选择新账号
                 if target_token.is_none() {
                     let start_idx = self.current_index.fetch_add(1, Ordering::SeqCst) % total;
+                    
+                    let mut fallback_token: Option<ProxyToken> = None;
+
                     for offset in 0..total {
                         let idx = (start_idx + offset) % total;
                         let candidate = &tokens_snapshot[idx];
@@ -990,24 +993,28 @@ impl TokenManager {
                         }
 
                         // 【新增 #621】模型级限流检查
-                        if quota_protection_enabled
-                            && candidate.protected_models.contains(&normalized_target)
-                        {
-                            tracing::debug!(
-                                "Account {} is quota-protected for model {} [{}], skipping",
+                        let is_protected = quota_protection_enabled
+                            && candidate.protected_models.contains(&normalized_target);
+
+                        // 【新增】主动避开限流或 5xx 锁定的账号 (高可用优化)
+                        let is_rate_limited = self
+                            .is_rate_limited(&candidate.account_id, Some(&normalized_target))
+                            .await;
+
+                        if is_protected || is_rate_limited {
+                             let reason = if is_protected { "quota-protected" } else { "rate-limited" };
+                             tracing::debug!(
+                                "  ⛔ {} - SKIP: {} for {} [{}]",
                                 candidate.email,
+                                reason,
                                 normalized_target,
                                 target_model
                             );
-                            continue;
-                        }
 
-                        // 【新增】主动避开限流或 5xx 锁定的账号 (高可用优化)
-                        if self
-                            .is_rate_limited(&candidate.account_id, Some(&normalized_target))
-                            .await
-                        {
-                            // Changed to account_id
+                            // [FIX] 记录备选账号
+                            if fallback_token.is_none() {
+                                 fallback_token = Some(candidate.clone());
+                            }
                             continue;
                         }
 
@@ -1029,6 +1036,16 @@ impl TokenManager {
                         }
                         break;
                     }
+
+                    // [FIX] 如果没有找到健康账号，但有被限流的账号，尝试使用备选账号 (Hard Fallback)
+                    if target_token.is_none() {
+                        if let Some(fb) = fallback_token {
+                            tracing::warn!("⚠️ All accounts busy/protected (Mode B). Using rate-limited account {} as fallback.", fb.email);
+                            target_token = Some(fb);
+                            // Mode B typically updates last_used, so we should probably update it too to maintain the "lock" behavior if it succeeds
+                            need_update_last_used = Some((target_token.as_ref().unwrap().account_id.clone(), std::time::Instant::now()));
+                        }
+                    }
                 }
             } else if target_token.is_none() {
                 // 模式 C: 纯轮询模式 (Round-robin) 或强制轮换
@@ -1038,6 +1055,9 @@ impl TokenManager {
                     start_idx,
                     total
                 );
+                
+                let mut fallback_token: Option<ProxyToken> = None;
+
                 for offset in 0..total {
                     let idx = (start_idx + offset) % total;
                     let candidate = &tokens_snapshot[idx];
@@ -1052,25 +1072,30 @@ impl TokenManager {
                     }
 
                     // 【新增 #621】模型级限流检查
-                    if quota_protection_enabled
-                        && candidate.protected_models.contains(&normalized_target)
-                    {
-                        tracing::debug!(
-                            "  ⛔ {} - SKIP: quota-protected for {} [{}]",
+                    let is_protected = quota_protection_enabled
+                        && candidate.protected_models.contains(&normalized_target);
+
+                    // 【新增】主动避开限流或 5xx 锁定的账号
+                    let is_rate_limited = self
+                        .is_rate_limited(&candidate.account_id, Some(&normalized_target))
+                        .await;
+
+                    if is_protected || is_rate_limited {
+                         let reason = if is_protected { "quota-protected" } else { "rate-limited" };
+                         tracing::debug!(
+                            "  ⛔ {} - SKIP: {} for {} [{}]",
                             candidate.email,
+                            reason,
                             normalized_target,
                             target_model
                         );
-                        continue;
-                    }
 
-                    // 【新增】主动避开限流或 5xx 锁定的账号
-                    if self
-                        .is_rate_limited(&candidate.account_id, Some(&normalized_target))
-                        .await
-                    {
-                        // Changed to account_id
-                        tracing::debug!("  ⏳ {} - SKIP: rate-limited", candidate.email);
+                        // [FIX] 记录备选账号：如果所有账号都被限流/保护，优先使用被跳过的账号尝试（而不是直接报错）
+                        // 这样可以解决 "账号被误判为限流/保护导致无法工作" 的问题
+                        // 且 tokens_snapshot 已按优先级排序，所以这里遇到的第一个跳过账号也是优先级最高的
+                        if fallback_token.is_none() {
+                             fallback_token = Some(candidate.clone());
+                        }
                         continue;
                     }
 
@@ -1081,6 +1106,17 @@ impl TokenManager {
                         tracing::debug!("Force Rotation: Switched to account: {}", candidate.email);
                     }
                     break;
+                }
+
+                // [FIX] 如果没有找到健康账号，但有被限流的账号，尝试使用备选账号 (Hard Fallback)
+                if target_token.is_none() {
+                    if let Some(fb) = fallback_token {
+                        tracing::warn!("⚠️ All accounts busy/protected. Using rate-limited account {} as fallback (Check condition relaxed).", fb.email);
+                        target_token = Some(fb);
+                        
+                        // 既然我们要强行使用它，也许应该清除它的限流记录？
+                        // 不，让 handler 去处理。如果再次 429，会再次 update tracker。
+                    }
                 }
             }
 

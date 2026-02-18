@@ -116,7 +116,7 @@ pub async fn initiate_login(redirect_uri: &str, auth_provider: Option<&str>) -> 
     ));
     
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/operation", KIRO_API_URL))
+        .post(format!("{}/service/KiroWebPortalService/InitiateLogin", KIRO_API_URL))
         .header("Content-Type", "application/json")
         .json(&request)
         .send()
@@ -163,9 +163,9 @@ pub async fn exchange_code(
     
     crate::modules::logger::log_info("Exchanging authorization code for Kiro tokens...");
     
-    // Попробуем более простой endpoint
+    // Попробуем endpoint GetToken
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/operation", KIRO_API_URL))
+        .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
         .header("Content-Type", "application/json")
         .json(&request)
         .send()
@@ -207,7 +207,7 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     crate::modules::logger::log_info("Fetching Kiro user info...");
     
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/operation", KIRO_API_URL))
+        .post(format!("{}/service/KiroWebPortalService/GetUserInfo", KIRO_API_URL))
         .header("Content-Type", "application/json")
         .bearer_auth(access_token)
         .json(&request)
@@ -251,7 +251,7 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenRespon
     request_body.insert("refresh_token".to_string(), serde_json::Value::String(refresh_token.to_string()));
     
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/operation", KIRO_API_URL))
+        .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()

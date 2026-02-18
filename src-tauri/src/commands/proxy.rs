@@ -1,4 +1,4 @@
-use tauri::{State, Manager};
+use tauri::{State, Manager, Emitter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -750,7 +750,7 @@ pub async fn prepare_kiro_oauth_url(
     app_handle.state::<KiroOAuthState>().store_pkce(code_verifier, state);
     
     // Emit event with URL
-    app_handle.emit_all("kiro-oauth-url-generated", &redirect_url)
+    app_handle.emit("oauth-url-generated", &redirect_url)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
     
     Ok(redirect_url)
@@ -800,7 +800,7 @@ pub async fn complete_kiro_oauth_login(
     // Create account
     let token_data = TokenData::new(
         tokens.access_token,
-        Some(tokens.refresh_token),
+        tokens.refresh_token,
         tokens.expires_in,
         Some(user_info.email.clone()),
         None, // project_id not used for Kiro

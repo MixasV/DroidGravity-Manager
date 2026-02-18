@@ -893,8 +893,9 @@ impl TokenManager {
                                 .await
                                 .map(|kiro_resp| crate::modules::oauth::TokenResponse {
                                     access_token: kiro_resp.access_token,
-                                    refresh_token: kiro_resp.refresh_token,
+                                    refresh_token: Some(kiro_resp.refresh_token),
                                     expires_in: kiro_resp.expires_in,
+                                    token_type: "Bearer".to_string(),
                                 })
                         } else {
                             crate::modules::oauth::refresh_access_token(&token.refresh_token)

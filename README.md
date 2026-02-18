@@ -4,9 +4,32 @@
 > **DO NOT SYNC WITH UPSTREAM (lbjlaq/Antigravity-Manager)!**
 > This is a separate standalone project. Syncing with upstream will overwrite Droid-specific changes and localized branding.
 
-**Version 1.2.9**
+**Version 2.0.0**
 
-A fork of [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager) with **Factory Droid** support for seamless integration with Google Gemini and Anthropic Claude models.
+A fork of [Antigravity-Manager](https://github.com/lbjlaq/Antigravity-Manager) with **Factory Droid** support for seamless integration with Google Gemini, Anthropic Claude, and **Kiro** models.
+
+## 🌟 What's New in v2.0.0 - Kiro Integration
+
+- **🚀 Kiro Support**: Full integration with Kiro AI platform including OAuth authentication and all supported models
+- **🎯 All Kiro Models**: Support for Claude (Sonnet, Haiku, Opus) + Open Weight models (DeepSeek 3, Minimax 2.1, Qwen3 Coder Next)
+- **🔐 OAuth Authentication**: Seamless Kiro account addition via AWS Cognito with PKCE security
+- **🌐 Individual Proxies**: Each Kiro account can use its own HTTP/SOCKS5 proxy for enhanced privacy
+- **💰 Credit Optimization**: Open Weight models with reduced credit costs (DeepSeek: 0.25x, Minimax: 0.15x, Qwen: 0.05x)
+- **🔄 Smart Routing**: Automatic account rotation and provider selection (Gemini/Kiro)
+- **📊 Enhanced Monitoring**: Full support for Kiro API monitoring and quota tracking
+
+### Supported Kiro Models
+
+**Claude Models (Premium)**:
+- `auto` - Smart Router (recommended)
+- `claude-sonnet-4` / `claude-sonnet-4-5` - Balanced quality and speed
+- `claude-haiku-4-5` - Fast and economical
+- `claude-opus-4-5` / `claude-opus-4-6` - Most powerful for coding
+
+**Open Weight Models (Cost-Effective)**:
+- `deepseek-3` (0.25x credits) - Best for agentic workflows and code generation
+- `minimax-2-1` (0.15x credits) - Best for multilingual programming and UI generation
+- `qwen3-coder-next` (0.05x credits) - Best for coding agents with 256K context window
 
 ## 🌟 What's New in v1.2.9
 
@@ -79,8 +102,9 @@ The compiled application will be in `src-tauri/target/release/`.
 
 1. **Launch DroidGravity Manager**
 2. **Add Accounts**:
-   - For Gemini: Go to **Accounts** → **Add Account** → **OAuth** → Authorize with your Google account
-   - For Claude: Go to **Accounts** → **Add Account** → **OAuth** → Authorize with your Anthropic account
+   - **For Gemini**: Go to **Accounts** → **Add Account** → Select **Gemini** → **OAuth** → Authorize with your Google account
+   - **For Claude**: Go to **Accounts** → **Add Account** → Select **Gemini** → **OAuth** → Authorize with your Anthropic account  
+   - **For Kiro**: Go to **Accounts** → **Add Account** → Select **Kiro** → **OAuth** → Authorize with your Kiro account via AWS Cognito
 3. **Start the Proxy**: Navigate to **API Proxy** and enable the server (default port: `8045`)
 
 ### Step 2: Configure Factory Droid
@@ -93,14 +117,14 @@ The compiled application will be in `src-tauri/target/release/`.
    - **Important**: Replace `"sk-..."` with the API key shown in DroidGravity Manager (found in **API Proxy** section)
 
 3. **Merge Settings**:
-   Add the `customModels` array to your existing Factory settings:
+   Add the `customModels` array to your existing Factory settings. **Note**: All model IDs must use the `custom:` prefix:
 
 ```json
 {
   "customModels": [
     {
       "model": "gemini-3-flash",
-      "id": "gemini-3-flash-0",
+      "id": "custom:Gemini-3-Flash-0",
       "index": 0,
       "baseUrl": "http://127.0.0.1:8045/",
       "apiKey": "YOUR_DROIDGRAVITY_API_KEY_HERE",
@@ -111,7 +135,7 @@ The compiled application will be in `src-tauri/target/release/`.
     },
     {
       "model": "claude-sonnet-4-5",
-      "id": "claude-sonnet-4-5-7",
+      "id": "custom:Claude-4.5-Sonnet-7",
       "index": 7,
       "baseUrl": "http://127.0.0.1:8045",
       "apiKey": "YOUR_DROIDGRAVITY_API_KEY_HERE",
@@ -121,13 +145,24 @@ The compiled application will be in `src-tauri/target/release/`.
       "provider": "anthropic"
     },
     {
-      "model": "claude-opus-4-6-thinking",
-      "id": "claude-opus-4-6-thinking-8",
-      "index": 8,
+      "model": "auto",
+      "id": "custom:Kiro-Auto-10",
+      "index": 10,
       "baseUrl": "http://127.0.0.1:8045",
       "apiKey": "YOUR_DROIDGRAVITY_API_KEY_HERE",
-      "displayName": "Claude 4.6 Opus",
-      "maxOutputTokens": 8192,
+      "displayName": "Kiro Auto (Smart Router)",
+      "maxOutputTokens": 32000,
+      "noImageSupport": false,
+      "provider": "anthropic"
+    },
+    {
+      "model": "deepseek-3",
+      "id": "custom:Kiro-DeepSeek-3-16",
+      "index": 16,
+      "baseUrl": "http://127.0.0.1:8045",
+      "apiKey": "YOUR_DROIDGRAVITY_API_KEY_HERE",
+      "displayName": "Kiro DeepSeek 3 (0.25x credits, Agentic)",
+      "maxOutputTokens": 32000,
       "noImageSupport": false,
       "provider": "anthropic"
     }
@@ -136,14 +171,18 @@ The compiled application will be in `src-tauri/target/release/`.
 ```
 
 **Important Configuration Notes**:
-- **Both Gemini and Claude models**: Use `"provider": "anthropic"` 
+- **All models**: Use `"provider": "anthropic"` for compatibility
+- **Model IDs**: Must include `custom:` prefix (e.g., `custom:Kiro-Auto-10`)
 - **Gemini models**: Use `"baseUrl": "http://127.0.0.1:8045/"` (with trailing slash)
-- **Claude models**: Use `"baseUrl": "http://127.0.0.1:8045"` (no trailing slash)
+- **Claude/Kiro models**: Use `"baseUrl": "http://127.0.0.1:8045"` (no trailing slash)
 
 ### Step 3: Select Models in Factory Droid
 
 1. In your Factory Droid CLI, type: `/model`
-2. Select one of your custom models (e.g., "Gemini 3 Flash" or "Claude 4.5 Sonnet")
+2. Select one of your custom models:
+   - **Gemini**: "Gemini 3 Flash", "Gemini 2.5 Pro", etc.
+   - **Claude**: "Claude 4.5 Sonnet", "Claude 4.6 Opus", etc.
+   - **Kiro**: "Kiro Auto", "Kiro DeepSeek 3", "Kiro Qwen3 Coder Next", etc.
 3. Start chatting! DroidGravity will automatically manage account rotation and quotas
 
 ---
@@ -173,6 +212,15 @@ The compiled application will be in `src-tauri/target/release/`.
 - Claude 4.5 Sonnet (Thinking)
 - Claude 4.6 Opus (Thinking) [Recommended]
 - Claude 3.5 Sonnet & Haiku (Via Legacy IDs)
+
+**Kiro AI Platform**:
+- Auto (Smart Router) [Recommended]
+- Claude Sonnet 4.0/4.5
+- Claude Haiku 4.5 (Fast)
+- Claude Opus 4.5/4.6 (Powerful)
+- DeepSeek 3 (0.25x credits, Agentic)
+- Minimax 2.1 (0.15x credits, Multilingual)
+- Qwen3 Coder Next (0.05x credits, 256K context)
 
 ### Factory Droid Integration
 
@@ -227,6 +275,19 @@ Default port is `8045`. To change:
 ---
 
 ## 📝 Changelog
+
+### Version 2.0.0 (2026-02-18) - Kiro Integration
+
+- 🚀 **Kiro Platform Support**: Full integration with Kiro AI platform
+- 🔐 **OAuth Authentication**: AWS Cognito-based authentication with PKCE security
+- 🎯 **All Kiro Models**: Support for Claude models + Open Weight models (DeepSeek, Minimax, Qwen)
+- 🌐 **Individual Proxies**: Per-account HTTP/SOCKS5 proxy support for enhanced privacy
+- 💰 **Cost Optimization**: Open Weight models with reduced credit multipliers
+- 🔄 **Provider Selection**: UI support for choosing between Gemini and Kiro providers
+- 📊 **Enhanced Monitoring**: Full Kiro API monitoring and quota tracking
+- ⚡ **Smart Routing**: Automatic account rotation across multiple providers
+- 🛠️ **Backend Architecture**: Complete OAuth module, token management, and proxy handlers
+- 📋 **Factory Integration**: Pre-configured Kiro models in factory-droid-settings.json
 
 ### Version 1.2.9 (2026-02-11)
 

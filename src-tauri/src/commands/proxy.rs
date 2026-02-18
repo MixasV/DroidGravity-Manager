@@ -729,3 +729,175 @@ pub async fn clear_all_proxy_rate_limits(
         Err("服务未运行".to_string())
     }
 }
+
+
+// ============================================================================
+// Kiro OAuth Commands
+// ============================================================================
+
+/// Prepare Kiro OAuth URL (generates PKCE and returns redirect URL)
+#[tauri::command]
+pub async fn prepare_kiro_oauth_url(
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    use crate::modules::oauth_kiro;
+    
+    let redirect_uri = "http://localhost:3128/oauth/callback?login_option=kiro";
+    
+    let (redirect_url, code_verifier, state) = oauth_kiro::initiate_login(redirect_uri).await?;
+    
+    // Store PKCE parameters in app state for later use
+    app_handle.state::<KiroOAuthState>().store_pkce(code_verifier, state);
+    
+    // Emit event with URL
+    app_handle.emit_all("kiro-oauth-url-generated", &redirect_url)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    
+    Ok(redirect_url)
+}
+
+/// Start Kiro OAuth flow (opens browser and waits for callback)
+#[tauri::command]
+pub async fn start_kiro_oauth_login(
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::modules::oauth_server;
+    
+    let redirect_uri = "http://localhost:3128/oauth/callback?login_option=kiro";
+    
+    // Generate OAuth URL
+    let url = prepare_kiro_oauth_url(app_handle.clone()).await?;
+    
+    // Start callback server
+    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    
+    tokio::spawn(async move {
+        if let Err(e) = oauth_server::start_callback_server(3128, tx).await {
+            crate::modules::logger::log_error(&format!("Callback server error: {}", e));
+        }
+    });
+    
+    // Open browser
+    if let Err(e) = open::that(&url) {
+        return Err(format!("Failed to open browser: {}", e));
+    }
+    
+    // Wait for callback
+    match tokio::time::timeout(std::time::Duration::from_secs(300), rx.recv()).await {
+        Ok(Some(code)) => {
+            // Exchange code for tokens
+            complete_kiro_oauth_login(app_handle, code).await?;
+            Ok(())
+        }
+        Ok(None) => Err("Callback server closed unexpectedly".to_string()),
+        Err(_) => Err("OAuth timeout (5 minutes)".to_string()),
+    }
+}
+
+/// Complete Kiro OAuth login (exchange code for tokens and save account)
+#[tauri::command]
+pub async fn complete_kiro_oauth_login(
+    app_handle: tauri::AppHandle,
+    code: String,
+) -> Result<(), String> {
+    use crate::modules::{oauth_kiro, account};
+    use crate::models::{Account, TokenData};
+    
+    let redirect_uri = "http://localhost:3128/oauth/callback?login_option=kiro";
+    
+    // Get stored PKCE parameters
+    let kiro_state = app_handle.state::<KiroOAuthState>();
+    let (code_verifier, _state) = kiro_state.get_pkce()
+        .ok_or("PKCE parameters not found. Please restart OAuth flow.")?;
+    
+    // Exchange code for tokens
+    let tokens = oauth_kiro::exchange_code(&code, &code_verifier, redirect_uri).await?;
+    
+    // Get user info
+    let user_info = oauth_kiro::get_user_info(&tokens.access_token).await?;
+    
+    // Create account
+    let token_data = TokenData::new(
+        tokens.access_token,
+        tokens.refresh_token,
+        tokens.expires_in,
+        user_info.email.clone(),
+        None, // project_id not used for Kiro
+        None, // session_id
+    );
+    
+    let mut account = Account::new(
+        user_info.user_id.clone(),
+        user_info.email.clone(),
+        token_data,
+    );
+    
+    // Set Kiro-specific fields
+    account.provider = "kiro".to_string();
+    account.kiro_profile_arn = Some(tokens.profile_arn);
+    account.kiro_user_id = Some(user_info.user_id);
+    
+    // Save account
+    account::save_account(&account, &app_handle).await?;
+    
+    crate::modules::logger::log_info(&format!(
+        "Kiro account added successfully: {} ({})",
+        account.email,
+        account.id
+    ));
+    
+    // Emit success event
+    app_handle.emit_all("kiro-account-added", &account.email)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    
+    Ok(())
+}
+
+/// Cancel Kiro OAuth flow
+#[tauri::command]
+pub async fn cancel_kiro_oauth_login(
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let kiro_state = app_handle.state::<KiroOAuthState>();
+    kiro_state.clear_pkce();
+    Ok(())
+}
+
+// Kiro OAuth State (stores PKCE parameters)
+pub struct KiroOAuthState {
+    pkce: Arc<tokio::sync::RwLock<Option<(String, String)>>>, // (code_verifier, state)
+}
+
+impl KiroOAuthState {
+    pub fn new() -> Self {
+        Self {
+            pkce: Arc::new(tokio::sync::RwLock::new(None)),
+        }
+    }
+    
+    pub fn store_pkce(&self, code_verifier: String, state: String) {
+        let pkce = self.pkce.clone();
+        tokio::spawn(async move {
+            let mut lock = pkce.write().await;
+            *lock = Some((code_verifier, state));
+        });
+    }
+    
+    pub fn get_pkce(&self) -> Option<(String, String)> {
+        let pkce = self.pkce.clone();
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let lock = pkce.read().await;
+                lock.clone()
+            })
+        })
+    }
+    
+    pub fn clear_pkce(&self) {
+        let pkce = self.pkce.clone();
+        tokio::spawn(async move {
+            let mut lock = pkce.write().await;
+            *lock = None;
+        });
+    }
+}

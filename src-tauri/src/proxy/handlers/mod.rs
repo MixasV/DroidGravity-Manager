@@ -4,6 +4,7 @@
 pub mod claude;
 pub mod openai;
 pub mod gemini;
+pub mod kiro;
 pub mod mcp;
 pub mod common;
 pub mod audio;

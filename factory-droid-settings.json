@@ -19,7 +19,7 @@
     "customModels": [
         {
             "model": "gemini-3-flash",
-            "id": "gemini-3-flash-0",
+            "id": "custom:Gemini-3-Flash-0",
             "index": 0,
             "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
@@ -30,7 +30,7 @@
         },
         {
             "model": "gemini-3-pro-high",
-            "id": "gemini-3-pro-high-1",
+            "id": "custom:Gemini-3-Pro-High-1",
             "index": 1,
             "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
@@ -41,7 +41,7 @@
         },
         {
             "model": "gemini-3-pro-low",
-            "id": "gemini-3-pro-low-2",
+            "id": "custom:Gemini-3-Pro-Low-2",
             "index": 2,
             "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
@@ -52,7 +52,7 @@
         },
         {
             "model": "gemini-2.5-flash",
-            "id": "gemini-2-5-flash-3",
+            "id": "custom:Gemini-2.5-Flash-3",
             "index": 3,
             "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
@@ -63,7 +63,7 @@
         },
         {
             "model": "gemini-2.5-flash-lite",
-            "id": "gemini-2-5-flash-lite-4",
+            "id": "custom:Gemini-2.5-Flash-Lite-4",
             "index": 4,
             "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
@@ -74,7 +74,7 @@
         },
         {
             "model": "gemini-2.5-pro",
-            "id": "gemini-2-5-pro-5",
+            "id": "custom:Gemini-2.5-Pro-5",
             "index": 5,
             "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
@@ -85,7 +85,7 @@
         },
         {
             "model": "gemini-2.5-flash-thinking",
-            "id": "gemini-2-5-flash-thinking-6",
+            "id": "custom:Gemini-2.5-Flash-Thinking-6",
             "index": 6,
             "baseUrl": "http://127.0.0.1:8045/",
             "apiKey": "sk-...",
@@ -96,7 +96,7 @@
         },
         {
             "model": "claude-sonnet-4-5",
-            "id": "claude-sonnet-4-5-7",
+            "id": "custom:Claude-4.5-Sonnet-7",
             "index": 7,
             "baseUrl": "http://127.0.0.1:8045",
             "apiKey": "sk-...",
@@ -107,7 +107,7 @@
         },
         {
             "model": "claude-sonnet-4-5-thinking",
-            "id": "claude-sonnet-4-5-thinking-8",
+            "id": "custom:Claude-4.5-Sonnet-Thinking-8",
             "index": 8,
             "baseUrl": "http://127.0.0.1:8045",
             "apiKey": "sk-...",
@@ -118,7 +118,7 @@
         },
         {
             "model": "claude-opus-4-5-thinking",
-            "id": "claude-opus-4-5-thinking-9",
+            "id": "custom:Claude-4.5-Opus-Thinking-9",
             "index": 9,
             "baseUrl": "http://127.0.0.1:8045",
             "apiKey": "sk-...",
@@ -126,10 +126,109 @@
             "maxOutputTokens": 16384,
             "noImageSupport": false,
             "provider": "anthropic"
+        },
+        {
+            "model": "auto",
+            "id": "custom:Kiro-Auto-10",
+            "index": 10,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Kiro Auto (Smart Router)",
+            "maxOutputTokens": 32000,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "claude-sonnet-4",
+            "id": "custom:Kiro-Claude-Sonnet-4.0-11",
+            "index": 11,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Kiro Claude Sonnet 4.0",
+            "maxOutputTokens": 32000,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "claude-sonnet-4-5",
+            "id": "custom:Kiro-Claude-Sonnet-4.5-12",
+            "index": 12,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Kiro Claude Sonnet 4.5",
+            "maxOutputTokens": 32000,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "claude-haiku-4-5",
+            "id": "custom:Kiro-Claude-Haiku-4.5-13",
+            "index": 13,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Kiro Claude Haiku 4.5 (Fast)",
+            "maxOutputTokens": 32000,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "claude-opus-4-5",
+            "id": "custom:Kiro-Claude-Opus-4.5-14",
+            "index": 14,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Kiro Claude Opus 4.5 (Powerful)",
+            "maxOutputTokens": 32000,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "claude-opus-4-6",
+            "id": "custom:Kiro-Claude-Opus-4.6-15",
+            "index": 15,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Kiro Claude Opus 4.6 (Best for Coding)",
+            "maxOutputTokens": 32000,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "deepseek-3",
+            "id": "custom:Kiro-DeepSeek-3-16",
+            "index": 16,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Kiro DeepSeek 3 (0.25x credits, Agentic)",
+            "maxOutputTokens": 32000,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "minimax-2-1",
+            "id": "custom:Kiro-Minimax-2.1-17",
+            "index": 17,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Kiro Minimax 2.1 (0.15x credits, Multilingual)",
+            "maxOutputTokens": 32000,
+            "noImageSupport": false,
+            "provider": "anthropic"
+        },
+        {
+            "model": "qwen3-coder-next",
+            "id": "custom:Kiro-Qwen3-Coder-Next-18",
+            "index": 18,
+            "baseUrl": "http://127.0.0.1:8045",
+            "apiKey": "sk-...",
+            "displayName": "Kiro Qwen3 Coder Next (0.05x credits, 256K context, Best for coding agents)",
+            "maxOutputTokens": 256000,
+            "noImageSupport": false,
+            "provider": "anthropic"
         }
     ],
     "sessionDefaultSettings": {
-        "model": "gemini-3-flash-0",
+        "model": "custom:Gemini-3-Flash-0",
         "reasoningEffort": "none",
         "autonomyMode": "auto-high"
     },

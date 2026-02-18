@@ -369,6 +369,19 @@ impl AxumServer {
                 "/v1/models/detect",
                 post(handlers::common::handle_detect_model),
             )
+            // Kiro API routes (supports both OpenAI and Anthropic formats)
+            .route(
+                "/v1/chat/completions",  // OpenAI format (for compatibility)
+                post(handlers::kiro::handle_kiro_chat_completions),
+            )
+            .route(
+                "/v1/messages",  // Anthropic Claude format (native Kiro format)
+                post(handlers::kiro::handle_kiro_chat_completions),
+            )
+            .route(
+                "/v1/models",  // List available Kiro models
+                get(handlers::kiro::handle_kiro_models),
+            )
             .route("/internal/warmup", post(handlers::warmup::handle_warmup)) // 内部预热端点
             .route("/v1/api/event_logging/batch", post(silent_ok_handler))
             .route("/v1/api/event_logging", post(silent_ok_handler))

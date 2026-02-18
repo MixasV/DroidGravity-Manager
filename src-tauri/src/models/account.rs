@@ -2,12 +2,24 @@ use serde::{Deserialize, Serialize};
 use chrono;
 use super::{token::TokenData, quota::QuotaData};
 
+fn default_provider() -> String {
+    "gemini".to_string()
+}
+
 /// 账号数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub id: String,
     pub email: String,
     pub name: Option<String>,
+    /// Provider type: "gemini" or "kiro"
+    #[serde(default = "default_provider")]
+    pub provider: String,
+    /// Kiro-specific fields
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kiro_profile_arn: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kiro_user_id: Option<String>,
     pub token: TokenData,
     /// 可选的设备指纹，用于切换账号时固定机器信息
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -37,6 +49,9 @@ pub struct Account {
     /// Protected models for this account
     #[serde(default)]
     pub protected_models: std::collections::HashSet<String>,
+    /// Individual proxy for this account (HTTP/SOCKS5)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub individual_proxy: Option<String>,
     pub created_at: i64,
     pub last_used: i64,
 }
@@ -48,6 +63,9 @@ impl Account {
             id,
             email,
             name: None,
+            provider: "gemini".to_string(),
+            kiro_profile_arn: None,
+            kiro_user_id: None,
             token,
             device_profile: None,
             device_history: Vec::new(),
@@ -59,6 +77,7 @@ impl Account {
             proxy_disabled_reason: None,
             proxy_disabled_at: None,
             protected_models: std::collections::HashSet::new(),
+            individual_proxy: None,
             created_at: now,
             last_used: now,
         }

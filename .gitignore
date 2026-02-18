@@ -46,6 +46,10 @@ __pycache__/
 
 DOCKER_DEPLOYMENT.md
 
+# Kiro reverse engineering artifacts
+docs/kiro/
+scripts/*kiro-traffic*
+.kiro/
 
 # Added by cargo
 

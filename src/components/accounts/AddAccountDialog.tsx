@@ -16,6 +16,7 @@ type Status = 'idle' | 'loading' | 'success' | 'error';
 function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
+    const [provider, setProvider] = useState<'gemini' | 'kiro'>('gemini');
     const [activeTab, setActiveTab] = useState<'oauth' | 'token' | 'import'>('oauth');
     const [refreshToken, setRefreshToken] = useState('');
     const [oauthUrl, setOauthUrl] = useState('');
@@ -114,7 +115,9 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         if (activeTab !== 'oauth') return;
         if (oauthUrl) return;
 
-        invoke<string>('prepare_oauth_url')
+        const prepareCommand = provider === 'kiro' ? 'prepare_kiro_oauth_url' : 'prepare_oauth_url';
+        
+        invoke<string>(prepareCommand)
             .then((url) => {
                 // Set directly (also emitted via event), to avoid any race if event is missed.
                 if (typeof url === 'string' && url.length > 0) setOauthUrl(url);
@@ -122,7 +125,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
             .catch((e) => {
                 console.error('Failed to prepare OAuth URL:', e);
             });
-    }, [isOpen, activeTab, oauthUrl]);
+    }, [isOpen, activeTab, oauthUrl, provider]);
 
     // If user navigates away from OAuth tab, cancel prepared flow to release the port.
     useEffect(() => {
@@ -270,12 +273,14 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     const handleOAuth = () => {
         // Default flow: opens the default browser and completes automatically.
         // (If user opened the URL manually, completion is also triggered by oauth-callback-received.)
-        handleAction(t('accounts.add.tabs.oauth'), startOAuthLogin, { clearOauthUrl: false });
+        const command = provider === 'kiro' ? 'start_kiro_oauth_login' : 'start_oauth_login';
+        handleAction(t('accounts.add.tabs.oauth'), () => invoke(command), { clearOauthUrl: false });
     };
 
     const handleCompleteOAuth = () => {
         // Manual flow: user already authorized in their preferred browser, just finish the flow.
-        handleAction(t('accounts.add.tabs.oauth'), completeOAuthLogin, { clearOauthUrl: false });
+        const command = provider === 'kiro' ? 'complete_kiro_oauth_login' : 'complete_oauth_login';
+        handleAction(t('accounts.add.tabs.oauth'), () => invoke(command), { clearOauthUrl: false });
     };
 
     const handleCopyUrl = async () => {
@@ -360,6 +365,36 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
 
                     <div className="modal-box bg-white dark:bg-base-100 text-gray-900 dark:text-base-content">
                         <h3 className="font-bold text-lg mb-4">{t('accounts.add.title')}</h3>
+
+                        {/* Provider Selection */}
+                        <div className="bg-gray-100 dark:bg-base-200 p-1 rounded-xl mb-4 grid grid-cols-2 gap-1">
+                            <button
+                                className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${provider === 'gemini'
+                                    ? 'bg-white dark:bg-base-100 shadow-sm text-blue-600 dark:text-blue-400'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-base-300'
+                                    } `}
+                                onClick={() => {
+                                    setProvider('gemini');
+                                    setOauthUrl('');
+                                    setOauthUrlCopied(false);
+                                }}
+                            >
+                                🔷 Gemini
+                            </button>
+                            <button
+                                className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${provider === 'kiro'
+                                    ? 'bg-white dark:bg-base-100 shadow-sm text-purple-600 dark:text-purple-400'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-base-300'
+                                    } `}
+                                onClick={() => {
+                                    setProvider('kiro');
+                                    setOauthUrl('');
+                                    setOauthUrlCopied(false);
+                                }}
+                            >
+                                🚀 Kiro
+                            </button>
+                        </div>
 
                         {/* Tab 导航 - 胶囊风格 */}
                         <div className="bg-gray-100 dark:bg-base-200 p-1 rounded-xl mb-6 grid grid-cols-3 gap-1">

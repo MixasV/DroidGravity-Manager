@@ -5,6 +5,7 @@ pub mod logger;
 pub mod db;
 pub mod process;
 pub mod oauth;
+pub mod oauth_kiro;
 pub mod oauth_server;
 pub mod migration;
 pub mod tray;

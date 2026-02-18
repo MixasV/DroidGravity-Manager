@@ -40,6 +40,7 @@ pub fn run() {
                 });
         }))
         .manage(commands::proxy::ProxyServiceState::new())
+        .manage(commands::proxy::KiroOAuthState::new())
         .manage(crate::commands::cloudflared::CloudflaredState::new())
         .setup(|app| {
             info!("Setup starting...");
@@ -147,6 +148,11 @@ pub fn run() {
             commands::proxy::get_proxy_scheduling_config,
             commands::proxy::update_proxy_scheduling_config,
             commands::proxy::clear_proxy_session_bindings,
+            // Kiro OAuth commands
+            commands::proxy::prepare_kiro_oauth_url,
+            commands::proxy::start_kiro_oauth_login,
+            commands::proxy::complete_kiro_oauth_login,
+            commands::proxy::cancel_kiro_oauth_login,
             // Debug Console 命令
             modules::log_bridge::enable_debug_console,
             modules::log_bridge::disable_debug_console,

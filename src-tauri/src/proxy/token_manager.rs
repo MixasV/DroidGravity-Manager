@@ -12,6 +12,7 @@ use crate::proxy::sticky_config::StickySessionConfig;
 #[derive(Debug, Clone)]
 pub struct ProxyToken {
     pub account_id: String,
+    pub provider: String,                  // "gemini" | "kiro"
     pub access_token: String,
     pub refresh_token: String,
     pub expires_in: i64,
@@ -26,6 +27,10 @@ pub struct ProxyToken {
     pub reset_time: Option<i64>,           // [NEW] 配额刷新时间戳（用于排序优化）
     pub validation_blocked: bool,          // [NEW] Check for validation block (VALIDATION_REQUIRED temporary block)
     pub validation_blocked_until: i64,     // [NEW] Timestamp until which the account is blocked
+    // Kiro-specific fields
+    pub kiro_profile_arn: Option<String>,
+    pub kiro_user_id: Option<String>,
+    pub individual_proxy: Option<String>,
 }
 
 pub struct TokenManager {
@@ -343,8 +348,33 @@ impl TokenManager {
         // [NEW] 提取最近的配额刷新时间（用于排序优化：刷新时间越近优先级越高）
         let reset_time = self.extract_earliest_reset_time(&account);
 
+        // [NEW] 提取 provider (默认 "gemini")
+        let provider = account
+            .get("provider")
+            .and_then(|v| v.as_str())
+            .unwrap_or("gemini")
+            .to_string();
+
+        // [NEW] Kiro-specific fields
+        let kiro_profile_arn = account
+            .get("kiro_profile_arn")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let kiro_user_id = account
+            .get("kiro_user_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        // [NEW] Extract individual_proxy
+        let individual_proxy = account
+            .get("individual_proxy")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         Ok(Some(ProxyToken {
             account_id,
+            provider,
             access_token,
             refresh_token,
             expires_in,
@@ -359,6 +389,9 @@ impl TokenManager {
             reset_time,
             validation_blocked: account.get("validation_blocked").and_then(|v| v.as_bool()).unwrap_or(false),
             validation_blocked_until: account.get("validation_blocked_until").and_then(|v| v.as_i64()).unwrap_or(0),
+            kiro_profile_arn,
+            kiro_user_id,
+            individual_proxy,
         }))
     }
 
@@ -702,6 +735,21 @@ impl TokenManager {
             return Err("Token pool is empty".to_string());
         }
 
+        // [NEW] Filter by provider (quota_group)
+        // quota_group can be "gemini", "kiro", or "claude"
+        tokens_snapshot.retain(|t| {
+            match quota_group {
+                "kiro" => t.provider == "kiro",
+                "gemini" => t.provider == "gemini",
+                "claude" => t.provider == "gemini", // Claude uses Gemini accounts
+                _ => true, // Unknown quota_group, allow all
+            }
+        });
+
+        if tokens_snapshot.is_empty() {
+            return Err(format!("No {} accounts available", quota_group));
+        }
+
         // [FIX #StrictExclusion] 预过滤：移除所有在 excluded_accounts 中的账号
         // 这样可以确保无论后续逻辑如何（粘性、Mode B、Round Robin），都不会选中已失败的账号
         if let Some(excluded) = excluded_accounts {
@@ -838,9 +886,22 @@ impl TokenManager {
                     let now = chrono::Utc::now().timestamp();
                     if now >= token.timestamp - 300 {
                         tracing::debug!("账号 {} 的 token 即将过期，正在刷新...", token.email);
-                        match crate::modules::oauth::refresh_access_token(&token.refresh_token)
-                            .await
-                        {
+                        
+                        // [NEW] Check provider and use appropriate refresh method
+                        let refresh_result = if token.provider == "kiro" {
+                            crate::modules::oauth_kiro::refresh_access_token(&token.refresh_token)
+                                .await
+                                .map(|kiro_resp| crate::modules::oauth::TokenResponse {
+                                    access_token: kiro_resp.access_token,
+                                    refresh_token: kiro_resp.refresh_token,
+                                    expires_in: kiro_resp.expires_in,
+                                })
+                        } else {
+                            crate::modules::oauth::refresh_access_token(&token.refresh_token)
+                                .await
+                        };
+                        
+                        match refresh_result {
                             Ok(token_response) => {
                                 token.access_token = token_response.access_token.clone();
                                 token.expires_in = token_response.expires_in;
@@ -1224,8 +1285,21 @@ impl TokenManager {
             if now >= token.timestamp - 300 {
                 tracing::debug!("账号 {} 的 token 即将过期，正在刷新...", token.email);
 
-                // 调用 OAuth 刷新 token
-                match crate::modules::oauth::refresh_access_token(&token.refresh_token).await {
+                // [NEW] Check provider and use appropriate refresh method
+                let refresh_result = if token.provider == "kiro" {
+                    crate::modules::oauth_kiro::refresh_access_token(&token.refresh_token)
+                        .await
+                        .map(|kiro_resp| crate::modules::oauth::TokenResponse {
+                            access_token: kiro_resp.access_token,
+                            refresh_token: kiro_resp.refresh_token,
+                            expires_in: kiro_resp.expires_in,
+                        })
+                } else {
+                    crate::modules::oauth::refresh_access_token(&token.refresh_token)
+                        .await
+                };
+
+                match refresh_result {
                     Ok(token_response) => {
                         tracing::debug!("Token 刷新成功！");
 

@@ -7,15 +7,31 @@ use rand::Rng;
 const KIRO_API_URL: &str = "https://app.kiro.dev";
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct InitiateLoginRequest {
+    pub idp: String,
+    #[serde(rename = "redirectUri")]
+    pub redirect_uri: String,
+    pub state: String,
+    #[serde(rename = "codeChallenge")]
+    pub code_challenge: String,
+    #[serde(rename = "codeChallengeMethod")]
+    pub code_challenge_method: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InitiateLoginResponse {
+    #[serde(rename = "redirectUrl")]
+    pub redirect_url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GetTokenRequest {
     pub code: String,
     pub code_verifier: String,
     pub redirect_uri: String,
 }
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KiroTokenResponse {
-    #[serde(rename = "accessToken")]
     pub access_token: String,
     #[serde(rename = "refreshToken")]
     pub refresh_token: String,
@@ -64,27 +80,71 @@ pub fn generate_pkce() -> (String, String) {
     (verifier, challenge)
 }
 
-/// Initiate Kiro OAuth login - generate Kiro signin URL (как в оригинальном клиенте)
-pub async fn initiate_login(redirect_uri: &str, _auth_provider: Option<&str>) -> Result<(String, String, String), String> {
+/// Initiate Kiro OAuth login - вызывает InitiateLogin API для получения redirectUrl
+pub async fn initiate_login(redirect_uri: &str, auth_provider: Option<&str>) -> Result<(String, String, String), String> {
     // Generate PKCE
     let (code_verifier, code_challenge) = generate_pkce();
     let state = uuid::Uuid::new_v4().to_string();
     
-    // Build Kiro signin URL (как в оригинальном Kiro клиенте)
-    let auth_url = format!(
-        "https://app.kiro.dev/signin?state={}&code_challenge={}&code_challenge_method=S256&redirect_uri={}&redirect_from=KiroIDE",
-        state,
-        code_challenge,
-        urlencoding::encode(redirect_uri)
+    // Определяем провайдера (по умолчанию Google)
+    let idp = match auth_provider.unwrap_or("google") {
+        "github" => "GitHub",
+        "google" | _ => "Google",
+    };
+    
+    // Формируем redirect_uri с login_option как в оригинальном клиенте
+    let redirect_uri_with_option = format!("{}/oauth/callback?login_option={}", 
+        redirect_uri.trim_end_matches('/'), 
+        auth_provider.unwrap_or("google")
     );
     
+    let client = crate::utils::http::create_client(15);
+    
+    let request = InitiateLoginRequest {
+        idp: idp.to_string(),
+        redirect_uri: redirect_uri_with_option,
+        state: state.clone(),
+        code_challenge: code_challenge.clone(),
+        code_challenge_method: "S256".to_string(),
+    };
+    
     crate::modules::logger::log_info(&format!(
-        "Generated Kiro signin URL (state: {}, challenge: {}...)",
+        "Calling InitiateLogin API (state: {}, challenge: {}..., idp: {})",
         &state[..8],
-        &code_challenge[..16]
+        &code_challenge[..16],
+        idp
     ));
     
-    Ok((auth_url, code_verifier, state))
+    let response = client
+        .post(format!("{}/service/KiroWebPortalService/operation", KIRO_API_URL))
+        .header("Content-Type", "application/json")
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| format!("InitiateLogin request failed: {}", e))?;
+    
+    let status = response.status();
+    let response_text = response.text().await.unwrap_or_default();
+    
+    crate::modules::logger::log_info(&format!(
+        "InitiateLogin response: status={}, body={}",
+        status,
+        &response_text[..response_text.len().min(500)]
+    ));
+    
+    if status.is_success() {
+        let init_response: InitiateLoginResponse = serde_json::from_str(&response_text)
+            .map_err(|e| format!("Failed to parse InitiateLogin response: {} (response: {})", e, &response_text[..response_text.len().min(200)]))?;
+        
+        crate::modules::logger::log_info(&format!(
+            "Received redirectUrl: {}",
+            &init_response.redirect_url[..init_response.redirect_url.len().min(100)]
+        ));
+        
+        Ok((init_response.redirect_url, code_verifier, state))
+    } else {
+        Err(format!("InitiateLogin failed with status {}: {}", status, response_text))
+    }
 }
 
 /// Exchange authorization code for tokens
@@ -103,18 +163,27 @@ pub async fn exchange_code(
     
     crate::modules::logger::log_info("Exchanging authorization code for Kiro tokens...");
     
+    // Попробуем более простой endpoint
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
+        .post(format!("{}/service/KiroWebPortalService/operation", KIRO_API_URL))
+        .header("Content-Type", "application/json")
         .json(&request)
         .send()
         .await
         .map_err(|e| format!("GetToken request failed: {}", e))?;
     
-    if response.status().is_success() {
-        let tokens: KiroTokenResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse GetToken response: {}", e))?;
+    let status = response.status();
+    let response_text = response.text().await.unwrap_or_default();
+    
+    crate::modules::logger::log_info(&format!(
+        "GetToken response: status={}, body={}",
+        status,
+        &response_text[..response_text.len().min(500)]
+    ));
+    
+    if status.is_success() {
+        let tokens: KiroTokenResponse = serde_json::from_str(&response_text)
+            .map_err(|e| format!("Failed to parse GetToken response: {} (response: {})", e, &response_text[..response_text.len().min(200)]))?;
         
         crate::modules::logger::log_info(&format!(
             "Kiro tokens received successfully (expires_in: {}s)",
@@ -123,8 +192,7 @@ pub async fn exchange_code(
         
         Ok(tokens)
     } else {
-        let error_text = response.text().await.unwrap_or_default();
-        Err(format!("GetToken failed: {}", error_text))
+        Err(format!("GetToken failed with status {}: {}", status, response_text))
     }
 }
 
@@ -139,18 +207,26 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     crate::modules::logger::log_info("Fetching Kiro user info...");
     
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/GetUserInfo", KIRO_API_URL))
+        .post(format!("{}/service/KiroWebPortalService/operation", KIRO_API_URL))
+        .header("Content-Type", "application/json")
         .bearer_auth(access_token)
         .json(&request)
         .send()
         .await
         .map_err(|e| format!("GetUserInfo request failed: {}", e))?;
     
-    if response.status().is_success() {
-        let user_info: KiroUserInfo = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse GetUserInfo response: {}", e))?;
+    let status = response.status();
+    let response_text = response.text().await.unwrap_or_default();
+    
+    crate::modules::logger::log_info(&format!(
+        "GetUserInfo response: status={}, body={}",
+        status,
+        &response_text[..response_text.len().min(500)]
+    ));
+    
+    if status.is_success() {
+        let user_info: KiroUserInfo = serde_json::from_str(&response_text)
+            .map_err(|e| format!("Failed to parse GetUserInfo response: {} (response: {})", e, &response_text[..response_text.len().min(200)]))?;
         
         crate::modules::logger::log_info(&format!(
             "Kiro user info received: {} ({})",
@@ -160,8 +236,7 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
         
         Ok(user_info)
     } else {
-        let error_text = response.text().await.unwrap_or_default();
-        Err(format!("GetUserInfo failed: {}", error_text))
+        Err(format!("GetUserInfo failed with status {}: {}", status, response_text))
     }
 }
 
@@ -171,27 +246,34 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenRespon
     
     crate::modules::logger::log_info("Refreshing Kiro access token...");
     
-    // Kiro uses the same GetToken endpoint with refresh_token
+    // Kiro uses the same endpoint with refresh_token
     let mut request_body = serde_json::Map::new();
     request_body.insert("refresh_token".to_string(), serde_json::Value::String(refresh_token.to_string()));
     
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
+        .post(format!("{}/service/KiroWebPortalService/operation", KIRO_API_URL))
+        .header("Content-Type", "application/json")
         .json(&request_body)
         .send()
         .await
         .map_err(|e| format!("Token refresh request failed: {}", e))?;
     
-    if response.status().is_success() {
-        let tokens: KiroTokenResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse refresh response: {}", e))?;
+    let status = response.status();
+    let response_text = response.text().await.unwrap_or_default();
+    
+    crate::modules::logger::log_info(&format!(
+        "Token refresh response: status={}, body={}",
+        status,
+        &response_text[..response_text.len().min(500)]
+    ));
+    
+    if status.is_success() {
+        let tokens: KiroTokenResponse = serde_json::from_str(&response_text)
+            .map_err(|e| format!("Failed to parse refresh response: {} (response: {})", e, &response_text[..response_text.len().min(200)]))?;
         
         crate::modules::logger::log_info("Kiro token refreshed successfully");
         Ok(tokens)
     } else {
-        let error_text = response.text().await.unwrap_or_default();
-        Err(format!("Token refresh failed: {}", error_text))
+        Err(format!("Token refresh failed with status {}: {}", status, response_text))
     }
 }

@@ -45,7 +45,7 @@ fn oauth_fail_html() -> &'static str {
 /// Prepare Kiro OAuth URL (without opening browser)
 pub async fn prepare_kiro_oauth_url(
     app_handle: tauri::AppHandle,
-    _auth_provider: Option<String>,
+    auth_provider: Option<String>,
 ) -> Result<String, String> {
     use tauri::Emitter;
 
@@ -68,8 +68,8 @@ pub async fn prepare_kiro_oauth_url(
 
     crate::modules::logger::log_info(&format!("Kiro OAuth callback server started on port {}", port));
 
-    // Initiate OAuth flow with Kiro - НЕ передаем auth_provider, так как пользователь выбирает на странице Kiro
-    let (auth_url, code_verifier, state) = oauth_kiro::initiate_login(&redirect_uri, None).await?;
+    // Initiate OAuth flow with Kiro - передаем auth_provider для правильного idp
+    let (auth_url, code_verifier, state) = oauth_kiro::initiate_login(&redirect_uri, auth_provider.as_deref()).await?;
 
     // Create channels for code exchange
     let (code_tx, code_rx) = oneshot::channel();
@@ -94,16 +94,27 @@ pub async fn prepare_kiro_oauth_url(
     let state_clone = state.clone();
     
     tokio::spawn(async move {
-        while let Ok((mut stream, _)) = listener.accept().await {
+        while let Ok((mut stream, addr)) = listener.accept().await {
             let mut buffer = [0; 4096];
             if let Ok(n) = stream.read(&mut buffer).await {
                 let request = String::from_utf8_lossy(&buffer[..n]);
+                
+                crate::modules::logger::log_info(&format!(
+                    "Received callback request from {}: {}",
+                    addr,
+                    request.lines().next().unwrap_or("(empty)")
+                ));
                 
                 if let Some(line) = request.lines().next() {
                     if line.starts_with("GET /") {
                         // Parse URL to extract code
                         if let Some(url_part) = line.split_whitespace().nth(1) {
                             let full_url = format!("http://localhost{}", url_part);
+                            
+                            crate::modules::logger::log_info(&format!(
+                                "Parsing callback URL: {}",
+                                full_url
+                            ));
                             
                             match url::Url::parse(&full_url) {
                                 Ok(url) => {
@@ -119,6 +130,13 @@ pub async fn prepare_kiro_oauth_url(
                                             _ => {}
                                         }
                                     }
+                                    
+                                    crate::modules::logger::log_info(&format!(
+                                        "Parsed parameters: code={}, state={}, error={}",
+                                        code_opt.as_ref().map(|c| &c[..c.len().min(20)]).unwrap_or("None"),
+                                        state_opt.as_ref().map(|s| &s[..s.len().min(20)]).unwrap_or("None"),
+                                        error_opt.as_ref().unwrap_or(&"None".to_string())
+                                    ));
                                     
                                     // Validate state
                                     let state_valid = state_opt.as_ref() == Some(&state_clone);
@@ -156,11 +174,13 @@ pub async fn prepare_kiro_oauth_url(
                                             }
                                         }
                                     } else {
-                                        let _ = stream.write_all(oauth_fail_html().as_bytes()).await;
+                                        // Нет кода - возможно, это просто проверка доступности
+                                        let _ = stream.write_all("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nOK".as_bytes()).await;
                                         let _ = stream.flush().await;
                                     }
                                 }
-                                Err(_) => {
+                                Err(e) => {
+                                    crate::modules::logger::log_warn(&format!("Failed to parse URL: {}", e));
                                     let _ = stream.write_all(oauth_fail_html().as_bytes()).await;
                                     let _ = stream.flush().await;
                                 }

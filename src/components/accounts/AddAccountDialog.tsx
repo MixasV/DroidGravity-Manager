@@ -22,6 +22,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     const [oauthUrl, setOauthUrl] = useState('');
     const [oauthUrlCopied, setOauthUrlCopied] = useState(false);
     const [manualCode, setManualCode] = useState(''); // For manual Kiro OAuth code input
+    const [kiroAuthProvider, setKiroAuthProvider] = useState<'google' | 'github'>('google'); // Kiro auth provider
 
     // UI State
     const [status, setStatus] = useState<Status>('idle');
@@ -117,8 +118,9 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         if (oauthUrl && provider === 'kiro') return; // Don't regenerate if we already have Kiro URL
 
         const prepareCommand = provider === 'kiro' ? 'prepare_kiro_oauth_url' : 'prepare_oauth_url';
+        const params = provider === 'kiro' ? { auth_provider: kiroAuthProvider } : undefined;
         
-        invoke<string>(prepareCommand)
+        invoke<string>(prepareCommand, params)
             .then((url) => {
                 // Set directly (also emitted via event), to avoid any race if event is missed.
                 if (typeof url === 'string' && url.length > 0) setOauthUrl(url);
@@ -126,7 +128,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
             .catch((e) => {
                 console.error('Failed to prepare OAuth URL:', e);
             });
-    }, [isOpen, activeTab, oauthUrl, provider]);
+    }, [isOpen, activeTab, oauthUrl, provider, kiroAuthProvider]);
 
     // If user navigates away from OAuth tab, cancel prepared flow to release the port.
     useEffect(() => {
@@ -146,6 +148,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         setOauthUrl('');
         setOauthUrlCopied(false);
         setManualCode('');
+        setKiroAuthProvider('google');
     };
 
     const handleAction = async (
@@ -460,6 +463,44 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                             {/* OAuth 授权 */}
                             {activeTab === 'oauth' && (
                                 <div className="space-y-6 py-4">
+                                    {/* Kiro Auth Provider Selection */}
+                                    {provider === 'kiro' && (
+                                        <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
+                                            <div className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-2">
+                                                Choose Kiro Authorization Method:
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${kiroAuthProvider === 'google'
+                                                        ? 'bg-white dark:bg-purple-800 shadow-sm text-purple-600 dark:text-purple-200 border border-purple-300 dark:border-purple-600'
+                                                        : 'text-purple-500 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-800/50'
+                                                        }`}
+                                                    onClick={() => {
+                                                        setKiroAuthProvider('google');
+                                                        setOauthUrl(''); // Force regenerate URL
+                                                    }}
+                                                >
+                                                    🔍 Google
+                                                </button>
+                                                <button
+                                                    className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${kiroAuthProvider === 'github'
+                                                        ? 'bg-white dark:bg-purple-800 shadow-sm text-purple-600 dark:text-purple-200 border border-purple-300 dark:border-purple-600'
+                                                        : 'text-purple-500 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-800/50'
+                                                        }`}
+                                                    onClick={() => {
+                                                        setKiroAuthProvider('github');
+                                                        setOauthUrl(''); // Force regenerate URL
+                                                    }}
+                                                >
+                                                    🐙 GitHub
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-purple-600 dark:text-purple-300 mt-2">
+                                                This determines which account you'll use to sign in to Kiro.
+                                            </p>
+                                        </div>
+                                    )}
+
                                     <div className="text-center space-y-3">
                                         <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-full w-20 h-20 mx-auto flex items-center justify-center">
                                             <Globe className="w-10 h-10 text-blue-500" />

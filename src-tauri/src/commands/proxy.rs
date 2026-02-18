@@ -1,4 +1,4 @@
-use tauri::{State, Manager, Emitter};
+use tauri::{State, Emitter};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};

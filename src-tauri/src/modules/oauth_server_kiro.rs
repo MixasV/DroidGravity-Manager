@@ -3,6 +3,7 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use std::sync::{Mutex, OnceLock};
 use std::sync::Arc;
+use tauri::Emitter;
 use crate::modules::oauth_kiro;
 
 struct KiroOAuthFlowState {
@@ -123,10 +124,9 @@ pub async fn prepare_kiro_oauth_url(app_handle: tauri::AppHandle) -> Result<Stri
                                         let _ = stream.write_all(oauth_fail_html().as_bytes()).await;
                                         let _ = stream.flush().await;
                                         
-                                        if let Ok(mut tx_guard) = code_tx_clone.lock().await {
-                                            if let Some(tx) = tx_guard.take() {
-                                                let _ = tx.send(Err(format!("OAuth error: {}", error)));
-                                            }
+                                        let mut tx_guard = code_tx_clone.lock().await;
+                                        if let Some(tx) = tx_guard.take() {
+                                            let _ = tx.send(Err(format!("OAuth error: {}", error)));
                                         }
                                     } else if let Some(code) = code_opt {
                                         if state_valid {
@@ -134,10 +134,9 @@ pub async fn prepare_kiro_oauth_url(app_handle: tauri::AppHandle) -> Result<Stri
                                             let _ = stream.flush().await;
                                             
                                             // Send code through channel
-                                            if let Ok(mut tx_guard) = code_tx_clone.lock().await {
-                                                if let Some(tx) = tx_guard.take() {
-                                                    let _ = tx.send(Ok(code));
-                                                }
+                                            let mut tx_guard = code_tx_clone.lock().await;
+                                            if let Some(tx) = tx_guard.take() {
+                                                let _ = tx.send(Ok(code));
                                             }
                                             
                                             // Emit event for UI
@@ -148,10 +147,9 @@ pub async fn prepare_kiro_oauth_url(app_handle: tauri::AppHandle) -> Result<Stri
                                             let _ = stream.write_all(oauth_fail_html().as_bytes()).await;
                                             let _ = stream.flush().await;
                                             
-                                            if let Ok(mut tx_guard) = code_tx_clone.lock().await {
-                                                if let Some(tx) = tx_guard.take() {
-                                                    let _ = tx.send(Err("Invalid state parameter".to_string()));
-                                                }
+                                            let mut tx_guard = code_tx_clone.lock().await;
+                                            if let Some(tx) = tx_guard.take() {
+                                                let _ = tx.send(Err("Invalid state parameter".to_string()));
                                             }
                                         }
                                     } else {
@@ -193,7 +191,7 @@ pub async fn start_kiro_oauth_flow(app_handle: tauri::AppHandle) -> Result<oauth
 }
 
 /// Complete Kiro OAuth flow (wait for callback and exchange code)
-pub async fn complete_kiro_oauth_flow(app_handle: tauri::AppHandle) -> Result<oauth_kiro::KiroTokenResponse, String> {
+pub async fn complete_kiro_oauth_flow(_app_handle: tauri::AppHandle) -> Result<oauth_kiro::KiroTokenResponse, String> {
     // Get stored flow state
     let (code_verifier, redirect_uri, code_rx) = {
         let mut flow_state = get_kiro_oauth_flow_state().lock().unwrap();
@@ -264,10 +262,9 @@ pub fn cancel_kiro_oauth_flow() {
     if let Some(state) = flow_state.take() {
         // Send cancellation through channel if still waiting
         tokio::spawn(async move {
-            if let Ok(mut tx_guard) = state.code_tx.lock().await {
-                if let Some(tx) = tx_guard.take() {
-                    let _ = tx.send(Err("OAuth flow cancelled by user".to_string()));
-                }
+            let mut tx_guard = state.code_tx.lock().await;
+            if let Some(tx) = tx_guard.take() {
+                let _ = tx.send(Err("OAuth flow cancelled by user".to_string()));
             }
         });
     }

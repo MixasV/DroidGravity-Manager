@@ -226,6 +226,38 @@ pub async fn complete_kiro_oauth_flow(app_handle: tauri::AppHandle) -> Result<oa
     Ok(tokens)
 }
 
+/// Submit authorization code manually (for manual OAuth flow)
+pub async fn submit_kiro_oauth_code(code: String, app_handle: tauri::AppHandle) -> Result<oauth_kiro::KiroTokenResponse, String> {
+    // Get stored flow state
+    let (code_verifier, redirect_uri) = {
+        let flow_state = get_kiro_oauth_flow_state().lock().unwrap();
+        if let Some(state) = flow_state.as_ref() {
+            let code_verifier = state.code_verifier.clone();
+            let redirect_uri = state.redirect_uri.clone();
+            (code_verifier, redirect_uri)
+        } else {
+            return Err("OAuth flow not prepared. Please call prepare_kiro_oauth_url first.".to_string());
+        }
+    };
+    
+    crate::modules::logger::log_info("Exchanging manually submitted authorization code for tokens...");
+    
+    // Exchange code for tokens
+    let tokens = oauth_kiro::exchange_code(&code, &code_verifier, &redirect_uri).await?;
+    
+    // Clear flow state
+    {
+        let mut flow_state = get_kiro_oauth_flow_state().lock().unwrap();
+        *flow_state = None;
+    }
+    
+    // Emit success event
+    app_handle.emit("oauth-callback-received", ())
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    
+    Ok(tokens)
+}
+
 /// Cancel Kiro OAuth flow
 pub fn cancel_kiro_oauth_flow() {
     let mut flow_state = get_kiro_oauth_flow_state().lock().unwrap();

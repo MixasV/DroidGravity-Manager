@@ -847,3 +847,50 @@ pub async fn cancel_kiro_oauth_login(
 }
 
 
+/// Submit Kiro authorization code manually
+#[tauri::command]
+pub async fn submit_kiro_oauth_code(
+    code: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let tokens = crate::modules::oauth_server_kiro::submit_kiro_oauth_code(code, app_handle.clone()).await?;
+    
+    // Get user info
+    let user_info = crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await?;
+    
+    // Create account
+    let token_data = crate::models::TokenData::new(
+        tokens.access_token,
+        tokens.refresh_token,
+        tokens.expires_in,
+        Some(user_info.email.clone()),
+        None, // project_id not used for Kiro
+        None, // session_id
+    );
+    
+    let mut account = crate::models::Account::new(
+        user_info.user_id.clone(),
+        user_info.email.clone(),
+        token_data,
+    );
+    
+    // Set Kiro-specific fields
+    account.provider = "kiro".to_string();
+    account.kiro_profile_arn = Some(tokens.profile_arn);
+    account.kiro_user_id = Some(user_info.user_id);
+    
+    // Save account
+    crate::modules::account::save_account(&account)?;
+    
+    crate::modules::logger::log_info(&format!(
+        "Kiro account added successfully via manual code: {} ({})",
+        account.email,
+        account.id
+    ));
+    
+    // Emit success event
+    app_handle.emit("kiro-account-added", &account.email)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    
+    Ok(())
+}

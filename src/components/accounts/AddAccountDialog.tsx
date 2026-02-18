@@ -21,6 +21,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     const [refreshToken, setRefreshToken] = useState('');
     const [oauthUrl, setOauthUrl] = useState('');
     const [oauthUrlCopied, setOauthUrlCopied] = useState(false);
+    const [manualCode, setManualCode] = useState(''); // For manual Kiro OAuth code input
 
     // UI State
     const [status, setStatus] = useState<Status>('idle');
@@ -144,6 +145,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         setRefreshToken('');
         setOauthUrl('');
         setOauthUrlCopied(false);
+        setManualCode('');
     };
 
     const handleAction = async (
@@ -281,6 +283,30 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         // Manual flow: user already authorized in their preferred browser, just finish the flow.
         const command = provider === 'kiro' ? 'complete_kiro_oauth_login' : 'complete_oauth_login';
         handleAction(t('accounts.add.tabs.oauth'), () => invoke(command), { clearOauthUrl: false });
+    };
+
+    const handleSubmitManualCode = () => {
+        if (!manualCode.trim()) {
+            setStatus('error');
+            setMessage('Please enter the authorization code or callback URL');
+            return;
+        }
+
+        // Extract code from URL if user pasted full callback URL
+        let code = manualCode.trim();
+        try {
+            if (code.includes('code=')) {
+                const url = new URL(code.startsWith('http') ? code : `http://localhost:3128${code}`);
+                const codeParam = url.searchParams.get('code');
+                if (codeParam) {
+                    code = codeParam;
+                }
+            }
+        } catch (e) {
+            // If URL parsing fails, assume it's already just the code
+        }
+
+        handleAction('Submit Authorization Code', () => invoke('submit_kiro_oauth_code', { code }), { clearOauthUrl: false });
     };
 
     const handleCopyUrl = async () => {
@@ -487,6 +513,35 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                                                     <CheckCircle2 className="w-4 h-4" />
                                                     {t('accounts.add.oauth.btn_finish')}
                                                 </button>
+
+                                                {provider === 'kiro' && (
+                                                    <div className="space-y-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+                                                        <div className="text-[11px] text-gray-500 dark:text-gray-400 text-left">
+                                                            Or paste authorization code/callback URL manually:
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <input
+                                                                type="text"
+                                                                className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-base-100 border border-gray-300 dark:border-base-300 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                                                                placeholder="Paste code or full callback URL here..."
+                                                                value={manualCode}
+                                                                onChange={(e) => setManualCode(e.target.value)}
+                                                                disabled={status === 'loading' || status === 'success'}
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                className="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                                                                onClick={handleSubmitManualCode}
+                                                                disabled={status === 'loading' || status === 'success' || !manualCode.trim()}
+                                                            >
+                                                                Submit
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-[10px] text-gray-400">
+                                                            You can authorize on another device and paste the code or full callback URL here.
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>

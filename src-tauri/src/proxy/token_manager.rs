@@ -1291,8 +1291,9 @@ impl TokenManager {
                         .await
                         .map(|kiro_resp| crate::modules::oauth::TokenResponse {
                             access_token: kiro_resp.access_token,
-                            refresh_token: kiro_resp.refresh_token,
+                            refresh_token: Some(kiro_resp.refresh_token),
                             expires_in: kiro_resp.expires_in,
+                            token_type: "Bearer".to_string(),
                         })
                 } else {
                     crate::modules::oauth::refresh_access_token(&token.refresh_token)
@@ -1503,6 +1504,12 @@ impl TokenManager {
 
     pub fn len(&self) -> usize {
         self.tokens.len()
+    }
+
+    /// Get individual proxy for account
+    pub fn get_individual_proxy(&self, account_id: &str) -> Option<String> {
+        self.tokens.get(account_id)
+            .and_then(|t| t.individual_proxy.clone())
     }
 
     /// 通过 email 获取指定账号的 Token（用于预热等需要指定账号的场景）

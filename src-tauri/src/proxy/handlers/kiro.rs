@@ -1,7 +1,7 @@
 // Kiro Handler
 use axum::{extract::State, http::StatusCode, response::IntoResponse, body::Body, http::Request};
 use tracing::{debug, error, info};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::proxy::server::AppState;
 use crate::proxy::handlers::common::{determine_retry_strategy, apply_retry_strategy, should_rotate_account};
@@ -62,8 +62,7 @@ pub async fn handle_kiro_request(
         info!("Using Kiro account: {} (attempt {}/{})", email, attempt + 1, max_attempts);
         
         // [NEW] Get individual proxy for this account
-        let individual_proxy = token_manager.tokens.get(&account_id)
-            .and_then(|t| t.individual_proxy.clone());
+        let individual_proxy = token_manager.get_individual_proxy(&account_id);
         
         // Build HTTP client with individual proxy if configured
         let client = if let Some(proxy_url) = individual_proxy {
@@ -131,9 +130,9 @@ pub async fn handle_kiro_request(
                         last_error = format!("Kiro API error {}: {}", status_code, error_text);
                         
                         // Apply retry strategy
-                        let retry_strategy = determine_retry_strategy(status_code, &error_text);
-                        if let Err(e) = apply_retry_strategy(&retry_strategy, attempt).await {
-                            return Err((StatusCode::TOO_MANY_REQUESTS, e));
+                        let retry_strategy = determine_retry_strategy(status_code, &error_text, false);
+                        if !apply_retry_strategy(retry_strategy, attempt, max_attempts, status_code, "kiro").await {
+                            return Err((StatusCode::TOO_MANY_REQUESTS, "Retry limit exceeded".to_string()));
                         }
                         continue;
                     } else {
@@ -202,8 +201,7 @@ pub async fn handle_kiro_chat_completions(
         info!("Using Kiro account: {} for model {} (attempt {}/{})", email, model, attempt + 1, max_attempts);
         
         // [NEW] Get individual proxy for this account
-        let individual_proxy = token_manager.tokens.get(&account_id)
-            .and_then(|t| t.individual_proxy.clone());
+        let individual_proxy = token_manager.get_individual_proxy(&account_id);
         
         // Build HTTP client with individual proxy if configured
         let client = if let Some(proxy_url) = individual_proxy {
@@ -268,9 +266,9 @@ pub async fn handle_kiro_chat_completions(
                 failed_accounts.insert(account_id);
                 last_error = format!("Kiro API error {}: {}", status_code, error_text);
                 
-                let retry_strategy = determine_retry_strategy(status_code, &error_text);
-                if let Err(e) = apply_retry_strategy(&retry_strategy, attempt).await {
-                    return Err((StatusCode::TOO_MANY_REQUESTS, e));
+                let retry_strategy = determine_retry_strategy(status_code, &error_text, false);
+                if !apply_retry_strategy(retry_strategy, attempt, max_attempts, status_code, "kiro").await {
+                    return Err((StatusCode::TOO_MANY_REQUESTS, "Retry limit exceeded".to_string()));
                 }
                 continue;
             } else {

@@ -215,7 +215,7 @@ The compiled application will be in `src-tauri/target/release/`.
 
 **Kiro AI Platform**:
 - Auto (Smart Router) [Recommended]
-- Claude Sonnet 4.0/4.5
+- Claude Sonnet 4.0/4.5/4.6 (Latest: 4.6 with 1.3x credits)
 - Claude Haiku 4.5 (Fast)
 - Claude Opus 4.5/4.6 (Powerful)
 - DeepSeek 3 (0.25x credits, Agentic)

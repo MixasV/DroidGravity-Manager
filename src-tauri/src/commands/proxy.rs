@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{State, Manager};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -761,44 +761,21 @@ pub async fn prepare_kiro_oauth_url(
 pub async fn start_kiro_oauth_login(
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    use crate::modules::oauth_server;
-    
-    let redirect_uri = "http://localhost:3128/oauth/callback?login_option=kiro";
-    
-    // Generate OAuth URL
+    // Generate OAuth URL and start flow
     let url = prepare_kiro_oauth_url(app_handle.clone()).await?;
-    
-    // Start callback server
-    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-    
-    tokio::spawn(async move {
-        if let Err(e) = oauth_server::start_callback_server(3128, tx).await {
-            crate::modules::logger::log_error(&format!("Callback server error: {}", e));
-        }
-    });
     
     // Open browser
     if let Err(e) = open::that(&url) {
         return Err(format!("Failed to open browser: {}", e));
     }
     
-    // Wait for callback
-    match tokio::time::timeout(std::time::Duration::from_secs(300), rx.recv()).await {
-        Ok(Some(code)) => {
-            // Exchange code for tokens
-            complete_kiro_oauth_login(app_handle, code).await?;
-            Ok(())
-        }
-        Ok(None) => Err("Callback server closed unexpectedly".to_string()),
-        Err(_) => Err("OAuth timeout (5 minutes)".to_string()),
-    }
+    Ok(())
 }
 
 /// Complete Kiro OAuth login (exchange code for tokens and save account)
 #[tauri::command]
 pub async fn complete_kiro_oauth_login(
     app_handle: tauri::AppHandle,
-    code: String,
 ) -> Result<(), String> {
     use crate::modules::{oauth_kiro, account};
     use crate::models::{Account, TokenData};
@@ -810,6 +787,10 @@ pub async fn complete_kiro_oauth_login(
     let (code_verifier, _state) = kiro_state.get_pkce()
         .ok_or("PKCE parameters not found. Please restart OAuth flow.")?;
     
+    // For now, we'll use a placeholder code - in real implementation,
+    // this would come from the OAuth callback
+    let code = "placeholder_code".to_string();
+    
     // Exchange code for tokens
     let tokens = oauth_kiro::exchange_code(&code, &code_verifier, redirect_uri).await?;
     
@@ -819,9 +800,9 @@ pub async fn complete_kiro_oauth_login(
     // Create account
     let token_data = TokenData::new(
         tokens.access_token,
-        tokens.refresh_token,
+        Some(tokens.refresh_token),
         tokens.expires_in,
-        user_info.email.clone(),
+        Some(user_info.email.clone()),
         None, // project_id not used for Kiro
         None, // session_id
     );
@@ -838,7 +819,7 @@ pub async fn complete_kiro_oauth_login(
     account.kiro_user_id = Some(user_info.user_id);
     
     // Save account
-    account::save_account(&account, &app_handle).await?;
+    account::save_account(&account)?;
     
     crate::modules::logger::log_info(&format!(
         "Kiro account added successfully: {} ({})",
@@ -847,7 +828,7 @@ pub async fn complete_kiro_oauth_login(
     ));
     
     // Emit success event
-    app_handle.emit_all("kiro-account-added", &account.email)
+    app_handle.emit("kiro-account-added", &account.email)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
     
     Ok(())

@@ -3,25 +3,8 @@ use sha2::{Sha256, Digest};
 use base64::{Engine as _, engine::general_purpose};
 use rand::Rng;
 
-// Kiro OAuth Configuration (AWS Cognito)
-const CLIENT_ID: &str = "59bd15eh40ee7pc20h0bkcu7id";
-const AUTH_URL: &str = "https://kiro-prod-us-east-1.auth.us-east-1.amazoncognito.com/oauth2/authorize";
+// Kiro OAuth Configuration
 const KIRO_API_URL: &str = "https://app.kiro.dev";
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct InitiateLoginRequest {
-    pub idp: String,
-    pub redirect_uri: String,
-    pub state: String,
-    pub code_challenge: String,
-    pub code_challenge_method: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct InitiateLoginResponse {
-    #[serde(rename = "redirectUrl")]
-    pub redirect_url: String,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetTokenRequest {
@@ -81,47 +64,27 @@ pub fn generate_pkce() -> (String, String) {
     (verifier, challenge)
 }
 
-/// Initiate Kiro OAuth login
+/// Initiate Kiro OAuth login - generate direct signin URL
 pub async fn initiate_login(redirect_uri: &str) -> Result<(String, String, String), String> {
-    let client = crate::utils::http::create_client(15);
-    
     // Generate PKCE
     let (code_verifier, code_challenge) = generate_pkce();
     let state = uuid::Uuid::new_v4().to_string();
     
-    let request = InitiateLoginRequest {
-        idp: "Google".to_string(),
-        redirect_uri: redirect_uri.to_string(),
-        state: state.clone(),
-        code_challenge: code_challenge.clone(),
-        code_challenge_method: "S256".to_string(),
-    };
+    // Build direct signin URL (like Kiro CLI does)
+    let auth_url = format!(
+        "https://app.kiro.dev/signin?state={}&code_challenge={}&code_challenge_method=S256&redirect_uri={}&redirect_from=KiroIDE",
+        state,
+        code_challenge,
+        urlencoding::encode(redirect_uri)
+    );
     
     crate::modules::logger::log_info(&format!(
-        "Initiating Kiro OAuth login (state: {}, challenge: {}...)",
+        "Generated Kiro OAuth URL (state: {}, challenge: {}...)",
         &state[..8],
         &code_challenge[..16]
     ));
     
-    let response = client
-        .post(format!("{}/service/KiroWebPortalService/InitiateLogin", KIRO_API_URL))
-        .json(&request)
-        .send()
-        .await
-        .map_err(|e| format!("InitiateLogin request failed: {}", e))?;
-    
-    if response.status().is_success() {
-        let result: InitiateLoginResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse InitiateLogin response: {}", e))?;
-        
-        crate::modules::logger::log_info("Kiro OAuth URL generated successfully");
-        Ok((result.redirect_url, code_verifier, state))
-    } else {
-        let error_text = response.text().await.unwrap_or_default();
-        Err(format!("InitiateLogin failed: {}", error_text))
-    }
+    Ok((auth_url, code_verifier, state))
 }
 
 /// Exchange authorization code for tokens

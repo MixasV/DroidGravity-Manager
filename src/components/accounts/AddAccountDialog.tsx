@@ -110,11 +110,11 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         };
     }, [completeOAuthLogin, t]);
 
-    // Pre-generate OAuth URL when dialog opens on OAuth tab (so URL is shown BEFORE "Start OAuth")
+    // Pre-generate OAuth URL when dialog opens on OAuth tab OR when provider changes to Kiro
     useEffect(() => {
         if (!isOpen) return;
         if (activeTab !== 'oauth') return;
-        if (oauthUrl) return;
+        if (oauthUrl && provider === 'kiro') return; // Don't regenerate if we already have Kiro URL
 
         const prepareCommand = provider === 'kiro' ? 'prepare_kiro_oauth_url' : 'prepare_oauth_url';
         

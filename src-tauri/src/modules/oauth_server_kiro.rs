@@ -45,7 +45,7 @@ fn oauth_fail_html() -> &'static str {
 /// Prepare Kiro OAuth URL (without opening browser)
 pub async fn prepare_kiro_oauth_url(
     app_handle: tauri::AppHandle,
-    auth_provider: Option<String>,
+    _auth_provider: Option<String>,
 ) -> Result<String, String> {
     use tauri::Emitter;
 
@@ -91,7 +91,6 @@ pub async fn prepare_kiro_oauth_url(
     // Start callback server task
     let app_handle_clone = app_handle.clone();
     let code_tx_clone = code_tx.clone();
-    let redirect_uri_clone = redirect_uri.clone();
     let state_clone = state.clone();
     
     tokio::spawn(async move {
@@ -183,7 +182,7 @@ pub async fn prepare_kiro_oauth_url(
 /// Start Kiro OAuth flow (prepare + open browser)
 pub async fn start_kiro_oauth_flow(app_handle: tauri::AppHandle) -> Result<oauth_kiro::KiroTokenResponse, String> {
     // Prepare OAuth URL
-    let auth_url = prepare_kiro_oauth_url(app_handle.clone()).await?;
+    let auth_url = prepare_kiro_oauth_url(app_handle.clone(), None).await?;
     
     // Open browser
     if let Err(e) = open::that(&auth_url) {

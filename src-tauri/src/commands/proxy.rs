@@ -740,7 +740,7 @@ pub async fn clear_all_proxy_rate_limits(
 pub async fn prepare_kiro_oauth_url(
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
-    crate::modules::oauth_server_kiro::prepare_kiro_oauth_url(app_handle).await
+    crate::modules::oauth_server_kiro::prepare_kiro_oauth_url(app_handle, None).await
 }
 
 /// Start Kiro OAuth flow (opens browser and waits for callback)

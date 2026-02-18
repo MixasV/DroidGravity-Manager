@@ -64,22 +64,22 @@ pub fn generate_pkce() -> (String, String) {
     (verifier, challenge)
 }
 
-/// Initiate Kiro OAuth login - generate direct signin URL
-pub async fn initiate_login(redirect_uri: &str) -> Result<(String, String, String), String> {
+/// Initiate Kiro OAuth login - generate Kiro signin URL (как в оригинальном клиенте)
+pub async fn initiate_login(redirect_uri: &str, _auth_provider: Option<&str>) -> Result<(String, String, String), String> {
     // Generate PKCE
     let (code_verifier, code_challenge) = generate_pkce();
     let state = uuid::Uuid::new_v4().to_string();
     
-    // Build AWS Cognito OAuth URL (like in captured traffic)
+    // Build Kiro signin URL (как в оригинальном Kiro клиенте)
     let auth_url = format!(
-        "https://kiro-prod-us-east-1.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=59bd15eh40ee7pc20h0bkcu7id&response_type=code&scope=email+openid&redirect_uri={}&state={}&code_challenge={}&code_challenge_method=S256&identity_provider=Google",
-        urlencoding::encode(redirect_uri),
+        "https://app.kiro.dev/signin?state={}&code_challenge={}&code_challenge_method=S256&redirect_uri={}&redirect_from=KiroIDE",
         state,
-        code_challenge
+        code_challenge,
+        urlencoding::encode(redirect_uri)
     );
     
     crate::modules::logger::log_info(&format!(
-        "Generated Kiro OAuth URL (state: {}, challenge: {}...)",
+        "Generated Kiro signin URL (state: {}, challenge: {}...)",
         &state[..8],
         &code_challenge[..16]
     ));

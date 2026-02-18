@@ -43,7 +43,10 @@ fn oauth_fail_html() -> &'static str {
 }
 
 /// Prepare Kiro OAuth URL (without opening browser)
-pub async fn prepare_kiro_oauth_url(app_handle: tauri::AppHandle) -> Result<String, String> {
+pub async fn prepare_kiro_oauth_url(
+    app_handle: tauri::AppHandle,
+    auth_provider: Option<String>,
+) -> Result<String, String> {
     use tauri::Emitter;
 
     // Check if flow is already prepared
@@ -53,9 +56,10 @@ pub async fn prepare_kiro_oauth_url(app_handle: tauri::AppHandle) -> Result<Stri
         }
     }
 
-    // Use fixed port 3128 like Kiro CLI with correct login_option
+    // Use fixed port 3128 like Kiro CLI
     let port = 3128u16;
-    let redirect_uri = format!("http://localhost:{}/oauth/callback?login_option=google", port);
+    // Используем простой redirect_uri как в оригинальном Kiro клиенте
+    let redirect_uri = format!("http://localhost:{}", port);
 
     // Start local server
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port))
@@ -64,8 +68,8 @@ pub async fn prepare_kiro_oauth_url(app_handle: tauri::AppHandle) -> Result<Stri
 
     crate::modules::logger::log_info(&format!("Kiro OAuth callback server started on port {}", port));
 
-    // Initiate OAuth flow with Kiro
-    let (auth_url, code_verifier, state) = oauth_kiro::initiate_login(&redirect_uri).await?;
+    // Initiate OAuth flow with Kiro - НЕ передаем auth_provider, так как пользователь выбирает на странице Kiro
+    let (auth_url, code_verifier, state) = oauth_kiro::initiate_login(&redirect_uri, None).await?;
 
     // Create channels for code exchange
     let (code_tx, code_rx) = oneshot::channel();
@@ -97,7 +101,7 @@ pub async fn prepare_kiro_oauth_url(app_handle: tauri::AppHandle) -> Result<Stri
                 let request = String::from_utf8_lossy(&buffer[..n]);
                 
                 if let Some(line) = request.lines().next() {
-                    if line.starts_with("GET /oauth/callback") {
+                    if line.starts_with("GET /") {
                         // Parse URL to extract code
                         if let Some(url_part) = line.split_whitespace().nth(1) {
                             let full_url = format!("http://localhost{}", url_part);

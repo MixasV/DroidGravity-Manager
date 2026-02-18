@@ -40,7 +40,6 @@ pub fn run() {
                 });
         }))
         .manage(commands::proxy::ProxyServiceState::new())
-        .manage(commands::proxy::KiroOAuthState::new())
         .manage(crate::commands::cloudflared::CloudflaredState::new())
         .setup(|app| {
             info!("Setup starting...");

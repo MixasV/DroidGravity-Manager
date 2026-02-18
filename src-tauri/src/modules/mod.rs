@@ -7,6 +7,7 @@ pub mod process;
 pub mod oauth;
 pub mod oauth_kiro;
 pub mod oauth_server;
+pub mod oauth_server_kiro;
 pub mod migration;
 pub mod tray;
 pub mod i18n;

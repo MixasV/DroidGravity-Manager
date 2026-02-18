@@ -117,7 +117,8 @@ pub async fn initiate_login(redirect_uri: &str, auth_provider: Option<&str>) -> 
     
     let response = client
         .post(format!("{}/service/KiroWebPortalService/InitiateLogin", KIRO_API_URL))
-        .header("Content-Type", "application/json")
+        .header("Content-Type", "application/x-amz-json-1.1")
+        .header("X-Amz-Target", "KiroWebPortalService.InitiateLogin")
         .json(&request)
         .send()
         .await
@@ -166,7 +167,8 @@ pub async fn exchange_code(
     // Попробуем endpoint GetToken
     let response = client
         .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
-        .header("Content-Type", "application/json")
+        .header("Content-Type", "application/x-amz-json-1.1")
+        .header("X-Amz-Target", "KiroWebPortalService.GetToken")
         .json(&request)
         .send()
         .await
@@ -208,7 +210,8 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     
     let response = client
         .post(format!("{}/service/KiroWebPortalService/GetUserInfo", KIRO_API_URL))
-        .header("Content-Type", "application/json")
+        .header("Content-Type", "application/x-amz-json-1.1")
+        .header("X-Amz-Target", "KiroWebPortalService.GetUserInfo")
         .bearer_auth(access_token)
         .json(&request)
         .send()
@@ -252,7 +255,8 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenRespon
     
     let response = client
         .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
-        .header("Content-Type", "application/json")
+        .header("Content-Type", "application/x-amz-json-1.1")
+        .header("X-Amz-Target", "KiroWebPortalService.GetToken")
         .json(&request_body)
         .send()
         .await

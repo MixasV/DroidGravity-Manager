@@ -53,9 +53,9 @@ pub async fn prepare_kiro_oauth_url(app_handle: tauri::AppHandle) -> Result<Stri
         }
     }
 
-    // Use fixed port 3128 like Kiro CLI
+    // Use fixed port 3128 like Kiro CLI with correct login_option
     let port = 3128u16;
-    let redirect_uri = format!("http://localhost:{}/oauth/callback?login_option=kiro", port);
+    let redirect_uri = format!("http://localhost:{}/oauth/callback?login_option=google", port);
 
     // Start local server
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port))

@@ -16,7 +16,7 @@ import { showToast } from '../components/common/ToastContainer';
 import { Account } from '../types/account';
 import { cn } from '../utils/cn';
 
-type FilterType = 'all' | 'pro' | 'ultra' | 'free';
+type FilterType = 'all' | 'pro' | 'ultra' | 'free' | 'gemini' | 'kiro';
 type ViewMode = 'list' | 'grid';
 
 import { useTranslation } from 'react-i18next';
@@ -139,6 +139,8 @@ function Accounts() {
                 const tier = a.quota?.subscription_tier?.toLowerCase();
                 return tier && !tier.includes('pro') && !tier.includes('ultra');
             }).length,
+            gemini: searchedAccounts.filter(a => a.provider === 'gemini' || !a.provider).length,
+            kiro: searchedAccounts.filter(a => a.provider === 'kiro').length,
         };
     }, [searchedAccounts]);
 
@@ -155,6 +157,10 @@ function Accounts() {
                 const tier = a.quota?.subscription_tier?.toLowerCase();
                 return tier && !tier.includes('pro') && !tier.includes('ultra');
             });
+        } else if (filter === 'gemini') {
+            result = result.filter(a => a.provider === 'gemini' || !a.provider);
+        } else if (filter === 'kiro') {
+            result = result.filter(a => a.provider === 'kiro');
         }
 
         return result;
@@ -593,6 +599,48 @@ function Accounts() {
                                 : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
                         )}>
                             {filterCounts.free}
+                        </span>
+                    </button>
+
+                    <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 self-center mx-1 shrink-0"></div>
+
+                    <button
+                        className={cn(
+                            "px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                            filter === 'gemini'
+                                ? "bg-white dark:bg-base-100 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-black/5"
+                                : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-base-content hover:bg-white/40"
+                        )}
+                        onClick={() => setFilter('gemini')}
+                    >
+                        Gemini
+                        <span className={cn(
+                            "px-1.5 py-0.5 rounded-md text-[10px] font-bold transition-colors",
+                            filter === 'gemini'
+                                ? "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                                : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                        )}>
+                            {filterCounts.gemini}
+                        </span>
+                    </button>
+
+                    <button
+                        className={cn(
+                            "px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                            filter === 'kiro'
+                                ? "bg-white dark:bg-base-100 text-purple-600 dark:text-purple-400 shadow-sm ring-1 ring-black/5"
+                                : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-base-content hover:bg-white/40"
+                        )}
+                        onClick={() => setFilter('kiro')}
+                    >
+                        🚀 Kiro
+                        <span className={cn(
+                            "px-1.5 py-0.5 rounded-md text-[10px] font-bold transition-colors",
+                            filter === 'kiro'
+                                ? "bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400"
+                                : "bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                        )}>
+                            {filterCounts.kiro}
                         </span>
                     </button>
                 </div>

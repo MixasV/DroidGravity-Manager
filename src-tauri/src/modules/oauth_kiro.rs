@@ -313,9 +313,6 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     let error_msg = format!("Failed to parse user info from response: {}", &response_text[..response_text.len().min(200)]);
     crate::modules::logger::log_error(&error_msg);
     Err(error_msg)
-    } else {
-        Err(format!("GetUserInfo failed with status {}: {}", status, response_text))
-    }
 }
 
 /// Manual token input for testing (temporary solution)

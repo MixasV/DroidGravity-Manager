@@ -739,9 +739,8 @@ pub async fn clear_all_proxy_rate_limits(
 #[tauri::command]
 pub async fn prepare_kiro_oauth_url(
     app_handle: tauri::AppHandle,
-    auth_provider: Option<String>,
 ) -> Result<String, String> {
-    crate::modules::oauth_server_kiro::prepare_kiro_oauth_url(app_handle, auth_provider).await
+    crate::modules::oauth_server_kiro::prepare_kiro_oauth_url(app_handle, None).await
 }
 
 /// Start Kiro OAuth flow (opens browser and waits for callback)
@@ -749,10 +748,30 @@ pub async fn prepare_kiro_oauth_url(
 pub async fn start_kiro_oauth_login(
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let tokens = crate::modules::oauth_server_kiro::start_kiro_oauth_flow(app_handle.clone()).await?;
+    crate::modules::logger::log_info("=== STARTING KIRO OAUTH FLOW ===");
+    
+    let tokens = crate::modules::oauth_server_kiro::start_kiro_oauth_flow(app_handle.clone()).await
+        .map_err(|e| {
+            crate::modules::logger::log_error(&format!("OAuth flow failed: {}", e));
+            e
+        })?;
+    
+    crate::modules::logger::log_info("=== OAUTH FLOW COMPLETED, GETTING USER INFO ===");
     
     // Get user info
-    let user_info = crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await?;
+    let user_info = crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await
+        .map_err(|e| {
+            crate::modules::logger::log_error(&format!("GetUserInfo failed: {}", e));
+            e
+        })?;
+    
+    crate::modules::logger::log_info(&format!(
+        "=== USER INFO RECEIVED ===\nEmail: {}\nUser ID: {}\nIDP: {}\nStatus: {}",
+        user_info.email,
+        user_info.user_id,
+        user_info.idp,
+        user_info.status
+    ));
     
     // Create account
     let token_data = crate::models::TokenData::new(
@@ -775,11 +794,22 @@ pub async fn start_kiro_oauth_login(
     account.kiro_profile_arn = Some(tokens.profile_arn);
     account.kiro_user_id = Some(user_info.user_id);
     
+    crate::modules::logger::log_info(&format!(
+        "=== SAVING KIRO ACCOUNT ===\nAccount ID: {}\nEmail: {}\nProvider: {}",
+        account.id,
+        account.email,
+        account.provider
+    ));
+    
     // Save account
-    crate::modules::account::save_account(&account)?;
+    crate::modules::account::save_account(&account)
+        .map_err(|e| {
+            crate::modules::logger::log_error(&format!("Failed to save account: {}", e));
+            e
+        })?;
     
     crate::modules::logger::log_info(&format!(
-        "Kiro account added successfully: {} ({})",
+        "=== KIRO ACCOUNT ADDED SUCCESSFULLY ===\nEmail: {}\nID: {}",
         account.email,
         account.id
     ));
@@ -854,10 +884,33 @@ pub async fn submit_kiro_oauth_code(
     code: String,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let tokens = crate::modules::oauth_server_kiro::submit_kiro_oauth_code(code, app_handle.clone()).await?;
+    crate::modules::logger::log_info(&format!(
+        "=== MANUAL CODE SUBMISSION ===\nCode: {}...",
+        &code[..code.len().min(50)]
+    ));
+    
+    let tokens = crate::modules::oauth_server_kiro::submit_kiro_oauth_code(code, app_handle.clone()).await
+        .map_err(|e| {
+            crate::modules::logger::log_error(&format!("Manual code submission failed: {}", e));
+            e
+        })?;
+    
+    crate::modules::logger::log_info("=== MANUAL CODE ACCEPTED, GETTING USER INFO ===");
     
     // Get user info
-    let user_info = crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await?;
+    let user_info = crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await
+        .map_err(|e| {
+            crate::modules::logger::log_error(&format!("GetUserInfo failed: {}", e));
+            e
+        })?;
+    
+    crate::modules::logger::log_info(&format!(
+        "=== USER INFO RECEIVED ===\nEmail: {}\nUser ID: {}\nIDP: {}\nStatus: {}",
+        user_info.email,
+        user_info.user_id,
+        user_info.idp,
+        user_info.status
+    ));
     
     // Create account
     let token_data = crate::models::TokenData::new(
@@ -880,11 +933,22 @@ pub async fn submit_kiro_oauth_code(
     account.kiro_profile_arn = Some(tokens.profile_arn);
     account.kiro_user_id = Some(user_info.user_id);
     
+    crate::modules::logger::log_info(&format!(
+        "=== SAVING KIRO ACCOUNT ===\nAccount ID: {}\nEmail: {}\nProvider: {}",
+        account.id,
+        account.email,
+        account.provider
+    ));
+    
     // Save account
-    crate::modules::account::save_account(&account)?;
+    crate::modules::account::save_account(&account)
+        .map_err(|e| {
+            crate::modules::logger::log_error(&format!("Failed to save account: {}", e));
+            e
+        })?;
     
     crate::modules::logger::log_info(&format!(
-        "Kiro account added successfully via manual code: {} ({})",
+        "=== KIRO ACCOUNT ADDED SUCCESSFULLY VIA MANUAL CODE ===\nEmail: {}\nID: {}",
         account.email,
         account.id
     ));

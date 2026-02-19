@@ -45,7 +45,7 @@ fn oauth_fail_html() -> &'static str {
 /// Prepare Kiro OAuth URL (without opening browser)
 pub async fn prepare_kiro_oauth_url(
     app_handle: tauri::AppHandle,
-    auth_provider: Option<String>,
+    _auth_provider: Option<String>,
 ) -> Result<String, String> {
     use tauri::Emitter;
 
@@ -68,8 +68,8 @@ pub async fn prepare_kiro_oauth_url(
 
     crate::modules::logger::log_info(&format!("Kiro OAuth callback server started on port {}", port));
 
-    // Initiate OAuth flow with Kiro - передаем auth_provider для правильного idp
-    let (auth_url, code_verifier, state) = oauth_kiro::initiate_login(&redirect_uri, auth_provider.as_deref()).await?;
+    // Initiate OAuth flow with Kiro - используем простой подход
+    let (auth_url, code_verifier, state) = oauth_kiro::initiate_login(&redirect_uri, None).await?;
 
     // Create channels for code exchange
     let (code_tx, code_rx) = oneshot::channel();
@@ -132,10 +132,12 @@ pub async fn prepare_kiro_oauth_url(
                                     }
                                     
                                     crate::modules::logger::log_info(&format!(
-                                        "Parsed parameters: code={}, state={}, error={}",
-                                        code_opt.as_ref().map(|c| &c[..c.len().min(20)]).unwrap_or("None"),
-                                        state_opt.as_ref().map(|s| &s[..s.len().min(20)]).unwrap_or("None"),
-                                        error_opt.as_ref().unwrap_or(&"None".to_string())
+                                        "=== OAUTH CALLBACK RECEIVED ===\nFull URL: {}\nParsed parameters:\n- code: {}\n- state: {}\n- error: {}\nExpected state: {}",
+                                        full_url,
+                                        code_opt.as_ref().map(|c| &c[..c.len().min(50)]).unwrap_or("None"),
+                                        state_opt.as_ref().map(|s| &s[..s.len().min(50)]).unwrap_or("None"),
+                                        error_opt.as_ref().unwrap_or(&"None".to_string()),
+                                        &state_clone[..state_clone.len().min(50)]
                                     ));
                                     
                                     // Validate state

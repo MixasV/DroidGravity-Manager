@@ -118,9 +118,8 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         if (oauthUrl && provider === 'kiro') return; // Don't regenerate if we already have Kiro URL
 
         const prepareCommand = provider === 'kiro' ? 'prepare_kiro_oauth_url' : 'prepare_oauth_url';
-        const params = provider === 'kiro' ? { auth_provider: kiroAuthProvider } : undefined;
         
-        invoke<string>(prepareCommand, params)
+        invoke<string>(prepareCommand)
             .then((url) => {
                 // Set directly (also emitted via event), to avoid any race if event is missed.
                 if (typeof url === 'string' && url.length > 0) setOauthUrl(url);
@@ -128,7 +127,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
             .catch((e) => {
                 console.error('Failed to prepare OAuth URL:', e);
             });
-    }, [isOpen, activeTab, oauthUrl, provider, kiroAuthProvider]);
+    }, [isOpen, activeTab, oauthUrl, provider]);
 
     // If user navigates away from OAuth tab, cancel prepared flow to release the port.
     useEffect(() => {

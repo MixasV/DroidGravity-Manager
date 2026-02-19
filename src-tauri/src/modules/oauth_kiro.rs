@@ -233,23 +233,13 @@ pub async fn exchange_code(
 pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     let client = crate::utils::http::create_client(15);
     
-    let request = GetUserInfoRequest {
-        origin: "KIRO_IDE".to_string(),
-    };
-    
     crate::modules::logger::log_info("Fetching Kiro user info...");
     
+    // Kiro API expects simple GET request with Authorization header
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/operation/GetUserInfo", KIRO_API_URL))
-        .header("Content-Type", "application/cbor")
-        .header("Accept", "application/cbor")
-        .header("smithy-protocol", "rpc-v2-cbor")
-        .header("amz-sdk-invocation-id", &uuid::Uuid::new_v4().to_string())
-        .header("amz-sdk-request", "attempt=1; max=1")
-        .header("x-amz-user-agent", "aws-sdk-js/1.0.0 ua/2.1 os/Windows lang/js md/browser#Google-Chrome_144 m/N,M,E")
-        .header("x-kl-saas-ajax-request", "Ajax_Request")
-        .bearer_auth(access_token)
-        .json(&request)
+        .get(format!("{}/api/user", KIRO_API_URL))
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("User-Agent", "DroidGravity-Manager/2.0.0")
         .send()
         .await
         .map_err(|e| format!("GetUserInfo request failed: {}", e))?;
@@ -264,16 +254,35 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     ));
     
     if status.is_success() {
-        let user_info: KiroUserInfo = serde_json::from_str(&response_text)
-            .map_err(|e| format!("Failed to parse GetUserInfo response: {} (response: {})", e, &response_text[..response_text.len().min(200)]))?;
+        // Try to parse as JSON first
+        if let Ok(user_info) = serde_json::from_str::<KiroUserInfo>(&response_text) {
+            crate::modules::logger::log_info(&format!(
+                "Kiro user info received: {} ({})",
+                user_info.email,
+                user_info.status
+            ));
+            return Ok(user_info);
+        }
         
-        crate::modules::logger::log_info(&format!(
-            "Kiro user info received: {} ({})",
-            user_info.email,
-            user_info.status
-        ));
+        // If JSON parsing fails, try to extract email from any format
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
+            if let Some(email) = json_value.get("email").and_then(|v| v.as_str()) {
+                return Ok(KiroUserInfo {
+                    email: email.to_string(),
+                    user_id: json_value.get("id")
+                        .or_else(|| json_value.get("userId"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    idp: "google".to_string(),
+                    status: "active".to_string(),
+                    feature_flags: std::collections::HashMap::new(),
+                });
+            }
+        }
         
-        Ok(user_info)
+        // If all parsing fails, return error
+        Err(format!("Failed to parse user info from response: {}", &response_text[..response_text.len().min(200)]))
     } else {
         Err(format!("GetUserInfo failed with status {}: {}", status, response_text))
     }

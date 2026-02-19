@@ -251,7 +251,11 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
         .json(&request_body)
         .send()
         .await
-        .map_err(|e| format!("GetUserInfo request failed: {}", e))?;
+        .map_err(|e| {
+            let error_msg = format!("GetUserInfo request failed: {}", e);
+            crate::modules::logger::log_error(&error_msg);
+            error_msg
+        })?;
     
     let status = response.status();
     let response_text = response.text().await.unwrap_or_default();
@@ -262,42 +266,53 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
         &response_text[..response_text.len().min(500)]
     ));
     
-    if status.is_success() {
-        // Try to parse as JSON first
-        if let Ok(user_info) = serde_json::from_str::<KiroUserInfo>(&response_text) {
-            crate::modules::logger::log_info(&format!(
-                "Kiro user info received: {} ({})",
-                user_info.email,
-                user_info.status
-            ));
+    if !status.is_success() {
+        let error_msg = format!("GetUserInfo failed with status {}: {}", status, &response_text[..response_text.len().min(200)]);
+        crate::modules::logger::log_error(&error_msg);
+        return Err(error_msg);
+    }
+    
+    // Try to parse as JSON first
+    if let Ok(user_info) = serde_json::from_str::<KiroUserInfo>(&response_text) {
+        crate::modules::logger::log_info(&format!(
+            "✅ Kiro user info parsed successfully: {} ({})",
+            user_info.email,
+            user_info.status
+        ));
+        return Ok(user_info);
+    }
+    
+    // If JSON parsing fails, try to extract email from any format
+    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
+        crate::modules::logger::log_info(&format!("Trying to extract email from JSON: {:?}", json_value));
+        
+        if let Some(email) = json_value.get("email").and_then(|v| v.as_str()) {
+            let user_info = KiroUserInfo {
+                email: email.to_string(),
+                user_id: json_value.get("id")
+                    .or_else(|| json_value.get("userId"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string(),
+                idp: json_value.get("idp")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Google")
+                    .to_string(),
+                status: json_value.get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Active")
+                    .to_string(),
+                feature_flags: std::collections::HashMap::new(),
+            };
+            crate::modules::logger::log_info(&format!("✅ Extracted user info: {}", user_info.email));
             return Ok(user_info);
         }
-        
-        // If JSON parsing fails, try to extract email from any format
-        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
-            if let Some(email) = json_value.get("email").and_then(|v| v.as_str()) {
-                return Ok(KiroUserInfo {
-                    email: email.to_string(),
-                    user_id: json_value.get("id")
-                        .or_else(|| json_value.get("userId"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    idp: json_value.get("idp")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Google")
-                        .to_string(),
-                    status: json_value.get("status")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Active")
-                        .to_string(),
-                    feature_flags: std::collections::HashMap::new(),
-                });
-            }
-        }
-        
-        // If all parsing fails, return error
-        Err(format!("Failed to parse user info from response: {}", &response_text[..response_text.len().min(200)]))
+    }
+    
+    // If all parsing fails, return error
+    let error_msg = format!("Failed to parse user info from response: {}", &response_text[..response_text.len().min(200)]);
+    crate::modules::logger::log_error(&error_msg);
+    Err(error_msg)
     } else {
         Err(format!("GetUserInfo failed with status {}: {}", status, response_text))
     }
@@ -411,10 +426,120 @@ pub async fn get_user_balance(access_token: &str) -> Result<serde_json::Value, S
         "next_reset_at": chrono::Utc::now().timestamp() + 86400
     }))
 }
-pub async fn refresh_access_token(_refresh_token: &str) -> Result<KiroTokenResponse, String> {
-    // For MVP, we'll skip token refresh and return an error
-    // The tokens seem to be long-lived enough for testing
-    crate::modules::logger::log_warn("Kiro token refresh is not implemented - tokens appear to be long-lived");
 
-    Err("Kiro token refresh not implemented - using existing tokens".to_string())
+/// Refresh Kiro access token using AWS Cognito
+pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenResponse, String> {
+    crate::modules::logger::log_info("Refreshing Kiro access token via AWS Cognito...");
+    
+    let client = crate::utils::http::create_client(15);
+    
+    // AWS Cognito configuration for Kiro
+    let cognito_domain = "https://kiro-prod-us-east-1.auth.us-east-1.amazoncognito.com";
+    let client_id = "59bd15eh40ee7pc20h0bkcu7id";
+    
+    // Clean token (remove any colons if present)
+    let clean_refresh_token = if refresh_token.contains(':') {
+        refresh_token.split(':').next().unwrap_or(refresh_token)
+    } else {
+        refresh_token
+    };
+    
+    crate::modules::logger::log_info(&format!(
+        "Using refresh token: {}... (len: {})",
+        &clean_refresh_token[..clean_refresh_token.len().min(20)],
+        clean_refresh_token.len()
+    ));
+    
+    // Prepare form data for token refresh
+    let form_data = [
+        ("grant_type", "refresh_token"),
+        ("refresh_token", clean_refresh_token),
+        ("client_id", client_id),
+    ];
+    
+    let response = client
+        .post(format!("{}/oauth2/token", cognito_domain))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("User-Agent", "DroidGravity-Manager/2.0.2")
+        .form(&form_data)
+        .send()
+        .await
+        .map_err(|e| {
+            let error_msg = format!("Cognito token refresh request failed: {}", e);
+            crate::modules::logger::log_error(&error_msg);
+            error_msg
+        })?;
+    
+    let status = response.status();
+    let response_text = response.text().await.unwrap_or_default();
+    
+    crate::modules::logger::log_info(&format!(
+        "Cognito refresh response: status={}, body={}",
+        status,
+        &response_text[..response_text.len().min(500)]
+    ));
+    
+    if !status.is_success() {
+        let error_msg = format!(
+            "Cognito token refresh failed with status {}: {}",
+            status,
+            &response_text[..response_text.len().min(200)]
+        );
+        crate::modules::logger::log_error(&error_msg);
+        return Err(error_msg);
+    }
+    
+    // Parse response
+    let token_response: serde_json::Value = serde_json::from_str(&response_text)
+        .map_err(|e| {
+            let error_msg = format!("Failed to parse Cognito response: {}", e);
+            crate::modules::logger::log_error(&error_msg);
+            error_msg
+        })?;
+    
+    let new_access_token = token_response
+        .get("access_token")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            let error_msg = "No access_token in Cognito response".to_string();
+            crate::modules::logger::log_error(&error_msg);
+            error_msg
+        })?
+        .to_string();
+    
+    let expires_in = token_response
+        .get("expires_in")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(3600);
+    
+    // New refresh token (if provided, otherwise use the old one)
+    let new_refresh_token = token_response
+        .get("refresh_token")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| clean_refresh_token.to_string());
+    
+    crate::modules::logger::log_info(&format!(
+        "✅ Token refreshed successfully: access_token={}..., expires_in={}s",
+        &new_access_token[..new_access_token.len().min(20)],
+        expires_in
+    ));
+    
+    // Get user info with new token to extract profile ARN
+    let user_info = get_user_info(&new_access_token).await?;
+    
+    // Extract profile ARN from user_id (format: arn:aws:iam::...)
+    let profile_arn = if user_info.user_id.starts_with("arn:aws:") {
+        user_info.user_id.clone()
+    } else {
+        // Fallback: construct ARN from user_id
+        format!("arn:aws:iam::123456789012:user/{}", user_info.user_id)
+    };
+    
+    Ok(KiroTokenResponse {
+        access_token: new_access_token,
+        refresh_token: new_refresh_token,
+        expires_in,
+        profile_arn,
+    })
 }

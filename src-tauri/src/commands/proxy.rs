@@ -791,8 +791,8 @@ pub async fn start_kiro_oauth_login(
     
     // Set Kiro-specific fields
     account.provider = "kiro".to_string();
-    account.kiro_profile_arn = Some(tokens.profile_arn);
-    account.kiro_user_id = Some(user_info.user_id);
+    account.kiro_profile_arn = Some(tokens.profile_arn.clone());
+    account.kiro_user_id = Some(user_info.user_id.clone());
     
     crate::modules::logger::log_info(&format!(
         "=== SAVING KIRO ACCOUNT ===\nAccount ID: {}\nEmail: {}\nProvider: {}",
@@ -1061,8 +1061,8 @@ pub async fn manual_kiro_token_input(
     
     // Set Kiro-specific fields
     account.provider = "kiro".to_string();
-    account.kiro_profile_arn = Some(tokens.profile_arn);
-    account.kiro_user_id = Some(fallback_user_id);
+    account.kiro_profile_arn = Some(tokens.profile_arn.clone());
+    account.kiro_user_id = Some(fallback_user_id.clone());
     
     crate::modules::logger::log_info(&format!(
         "=== SAVING KIRO ACCOUNT ===\nAccount ID: {}\nEmail: {}\nProvider: {}",

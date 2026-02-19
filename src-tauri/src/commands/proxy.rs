@@ -985,43 +985,60 @@ pub async fn manual_kiro_token_input(
             e
         })?;
     
-    crate::modules::logger::log_info("=== MANUAL TOKENS ACCEPTED, GETTING USER INFO ===");
+    crate::modules::logger::log_info("=== MANUAL TOKENS ACCEPTED, TRYING TO GET USER INFO ===");
     
-    // Get user info using the access token
-    let user_info = crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await
-        .map_err(|e| {
-            crate::modules::logger::log_error(&format!("GetUserInfo failed: {}", e));
-            e
-        })?;
-    
-    crate::modules::logger::log_info(&format!(
-        "=== USER INFO RECEIVED ===\nEmail: {}\nUser ID: {}\nIDP: {}\nStatus: {}",
-        user_info.email,
-        user_info.user_id,
-        user_info.idp,
-        user_info.status
-    ));
+    // Try to get user info, but don't fail if it doesn't work
+    let (email, user_id) = match crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await {
+        Ok(user_info) => {
+            crate::modules::logger::log_info(&format!(
+                "=== USER INFO RECEIVED ===\nEmail: {}\nUser ID: {}\nIDP: {}\nStatus: {}",
+                user_info.email,
+                user_info.user_id,
+                user_info.idp,
+                user_info.status
+            ));
+            (user_info.email, user_info.user_id)
+        }
+        Err(e) => {
+            crate::modules::logger::log_warning(&format!(
+                "GetUserInfo failed (this is expected with manual tokens): {}",
+                e
+            ));
+            
+            // Generate fallback user info from token
+            let fallback_email = format!("kiro-user-{}", uuid::Uuid::new_v4().to_string()[..8]);
+            let fallback_user_id = format!("manual-{}", uuid::Uuid::new_v4().to_string());
+            
+            crate::modules::logger::log_info(&format!(
+                "=== USING FALLBACK USER INFO ===\nEmail: {}\nUser ID: {}",
+                fallback_email,
+                fallback_user_id
+            ));
+            
+            (fallback_email, fallback_user_id)
+        }
+    };
     
     // Create account
     let token_data = crate::models::TokenData::new(
         tokens.access_token,
         tokens.refresh_token,
         tokens.expires_in,
-        Some(user_info.email.clone()),
+        Some(email.clone()),
         None, // project_id not used for Kiro
         None, // session_id
     );
     
     let mut account = crate::models::Account::new(
-        user_info.user_id.clone(),
-        user_info.email.clone(),
+        user_id.clone(),
+        email.clone(),
         token_data,
     );
     
     // Set Kiro-specific fields
     account.provider = "kiro".to_string();
     account.kiro_profile_arn = Some(tokens.profile_arn);
-    account.kiro_user_id = Some(user_info.user_id);
+    account.kiro_user_id = Some(user_id);
     
     crate::modules::logger::log_info(&format!(
         "=== SAVING KIRO ACCOUNT ===\nAccount ID: {}\nEmail: {}\nProvider: {}",

@@ -240,8 +240,14 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     crate::modules::logger::log_info("Fetching Kiro user info...");
     
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/GetUserInfo", KIRO_API_URL))
-        .header("Content-Type", "application/json")
+        .post(format!("{}/service/KiroWebPortalService/operation/GetUserInfo", KIRO_API_URL))
+        .header("Content-Type", "application/cbor")
+        .header("Accept", "application/cbor")
+        .header("smithy-protocol", "rpc-v2-cbor")
+        .header("amz-sdk-invocation-id", &uuid::Uuid::new_v4().to_string())
+        .header("amz-sdk-request", "attempt=1; max=1")
+        .header("x-amz-user-agent", "aws-sdk-js/1.0.0 ua/2.1 os/Windows lang/js md/browser#Google-Chrome_144 m/N,M,E")
+        .header("x-kl-saas-ajax-request", "Ajax_Request")
         .bearer_auth(access_token)
         .json(&request)
         .send()

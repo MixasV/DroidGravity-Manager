@@ -878,8 +878,8 @@ pub async fn complete_kiro_oauth_login(
     // Update the account with the saved ID and Kiro-specific fields
     let mut final_account = saved_account;
     final_account.provider = "kiro".to_string();
-    final_account.kiro_profile_arn = Some(tokens.profile_arn);
-    final_account.kiro_user_id = Some(user_info.user_id);
+    final_account.kiro_profile_arn = Some(tokens.profile_arn.clone());
+    final_account.kiro_user_id = Some(user_info.user_id.clone());
     
     // Save the updated account with Kiro fields
     crate::modules::account::save_account(&final_account)?;
@@ -1084,8 +1084,8 @@ pub async fn manual_kiro_token_input(
     // Update the account with the saved ID and Kiro-specific fields
     let mut final_account = saved_account;
     final_account.provider = "kiro".to_string();
-    final_account.kiro_profile_arn = Some(tokens.profile_arn);
-    final_account.kiro_user_id = Some(fallback_user_id);
+    final_account.kiro_profile_arn = Some(tokens.profile_arn.clone());
+    final_account.kiro_user_id = Some(fallback_user_id.clone());
     
     // Save the updated account with Kiro fields
     crate::modules::account::save_account(&final_account)

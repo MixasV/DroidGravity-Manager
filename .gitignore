@@ -45,6 +45,7 @@ __pycache__/
 # Test scripts (local only)
 test-*.py
 TESTING_*.md
+.tests/
 
 # Reference projects (for development only)
 

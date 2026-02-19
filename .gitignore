@@ -42,6 +42,10 @@ venv/
 __pycache__/
 *.pyc
 
+# Test scripts (local only)
+test-*.py
+TESTING_*.md
+
 # Reference projects (for development only)
 
 DOCKER_DEPLOYMENT.md

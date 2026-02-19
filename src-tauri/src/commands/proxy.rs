@@ -985,61 +985,39 @@ pub async fn manual_kiro_token_input(
             e
         })?;
     
-    crate::modules::logger::log_info("=== MANUAL TOKENS ACCEPTED, TRYING TO GET USER INFO ===");
+    crate::modules::logger::log_info("=== MANUAL TOKENS ACCEPTED, SKIPPING USER INFO API ===");
     
-    // Try to get user info, but don't fail if it doesn't work
-    let (email, user_id) = match crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await {
-        Ok(user_info) => {
-            crate::modules::logger::log_info(&format!(
-                "=== USER INFO RECEIVED ===\nEmail: {}\nUser ID: {}\nIDP: {}\nStatus: {}",
-                user_info.email,
-                user_info.user_id,
-                user_info.idp,
-                user_info.status
-            ));
-            (user_info.email, user_info.user_id)
-        }
-        Err(e) => {
-            crate::modules::logger::log_warn(&format!(
-                "GetUserInfo failed (this is expected with manual tokens): {}",
-                e
-            ));
-            
-            // Generate fallback user info from token
-            let uuid_str = uuid::Uuid::new_v4().to_string();
-            let fallback_email = format!("kiro-user-{}", &uuid_str[..8]);
-            let fallback_user_id = format!("manual-{}", uuid::Uuid::new_v4().to_string());
-            
-            crate::modules::logger::log_info(&format!(
-                "=== USING FALLBACK USER INFO ===\nEmail: {}\nUser ID: {}",
-                fallback_email,
-                fallback_user_id
-            ));
-            
-            (fallback_email, fallback_user_id)
-        }
-    };
+    // Skip GetUserInfo API call - just use fallback data
+    let uuid_str = uuid::Uuid::new_v4().to_string();
+    let fallback_email = format!("kiro-user-{}", &uuid_str[..8]);
+    let fallback_user_id = format!("manual-{}", uuid::Uuid::new_v4().to_string());
+    
+    crate::modules::logger::log_info(&format!(
+        "=== USING FALLBACK USER INFO (SKIPPING API) ===\nEmail: {}\nUser ID: {}",
+        fallback_email,
+        fallback_user_id
+    ));
     
     // Create account
     let token_data = crate::models::TokenData::new(
         tokens.access_token,
         tokens.refresh_token,
         tokens.expires_in,
-        Some(email.clone()),
+        Some(fallback_email.clone()),
         None, // project_id not used for Kiro
         None, // session_id
     );
     
     let mut account = crate::models::Account::new(
-        user_id.clone(),
-        email.clone(),
+        fallback_user_id.clone(),
+        fallback_email.clone(),
         token_data,
     );
     
     // Set Kiro-specific fields
     account.provider = "kiro".to_string();
     account.kiro_profile_arn = Some(tokens.profile_arn);
-    account.kiro_user_id = Some(user_id);
+    account.kiro_user_id = Some(fallback_user_id);
     
     crate::modules::logger::log_info(&format!(
         "=== SAVING KIRO ACCOUNT ===\nAccount ID: {}\nEmail: {}\nProvider: {}",

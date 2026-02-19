@@ -182,13 +182,13 @@ pub fn apply_cache_control_for_anthropic(messages: &mut [Message], system: &mut 
     // 1. 系统提示词始终缓存
     if let Some(sys) = system {
         match sys {
-            SystemPrompt::String(_) => {
-                // 如果是字符串,转为 Array 格式以便添加 cache_control
-                let text = match std::mem::replace(sys, SystemPrompt::String(String::new())) {
-                    SystemPrompt::String(s) => s,
+            SystemPrompt::Text(_) => {
+                // 如果是字符串,转为 Blocks 格式以便添加 cache_control
+                let text = match std::mem::replace(sys, SystemPrompt::Text(String::new())) {
+                    SystemPrompt::Text(s) => s,
                     _ => unreachable!(),
                 };
-                *sys = SystemPrompt::Array(vec![
+                *sys = SystemPrompt::Blocks(vec![
                     SystemBlock {
                         block_type: "text".to_string(),
                         text,
@@ -196,7 +196,7 @@ pub fn apply_cache_control_for_anthropic(messages: &mut [Message], system: &mut 
                     }
                 ]);
             }
-            SystemPrompt::Array(blocks) => {
+            SystemPrompt::Blocks(blocks) => {
                 if let Some(last_block) = blocks.last_mut() {
                     last_block.cache_control = Some(json!({"type": "ephemeral"}));
                 }
@@ -829,12 +829,12 @@ fn build_system_instruction(system: &Option<SystemPrompt>, _model_name: &str, ha
     let mut user_has_antigravity = false;
     if let Some(sys) = system {
         match sys {
-            SystemPrompt::String(text) => {
+            SystemPrompt::Text(text) => {
                 if text.contains("You are Antigravity") {
                     user_has_antigravity = true;
                 }
             }
-            SystemPrompt::Array(blocks) => {
+            SystemPrompt::Blocks(blocks) => {
                 for block in blocks {
                     if block.block_type == "text" && block.text.contains("You are Antigravity") {
                         user_has_antigravity = true;
@@ -853,12 +853,12 @@ fn build_system_instruction(system: &Option<SystemPrompt>, _model_name: &str, ha
     // 添加用户的系统提示词
     if let Some(sys) = system {
         match sys {
-            SystemPrompt::String(text) => {
+            SystemPrompt::Text(text) => {
                 // [MODIFIED] No longer filter "You are an interactive CLI tool"
                 // We pass everything through to ensure Flash/Lite models get full instructions
                 parts.push(json!({"text": text}));
             }
-            SystemPrompt::Array(blocks) => {
+            SystemPrompt::Blocks(blocks) => {
                 for block in blocks {
                     if block.block_type == "text" {
                         // [MODIFIED] No longer filter "You are an interactive CLI tool"

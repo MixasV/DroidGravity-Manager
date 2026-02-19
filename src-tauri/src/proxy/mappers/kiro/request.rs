@@ -84,13 +84,7 @@ fn build_current_message_content(claude_req: &ClaudeRequest) -> String {
             crate::proxy::mappers::claude::models::SystemPrompt::Text(text) => text.clone(),
             crate::proxy::mappers::claude::models::SystemPrompt::Blocks(blocks) => {
                 blocks.iter()
-                    .filter_map(|b| {
-                        if let crate::proxy::mappers::claude::models::SystemBlock::Text { text, .. } = b {
-                            Some(text.clone())
-                        } else {
-                            None
-                        }
-                    })
+                    .map(|b| b.text.clone())
                     .collect::<Vec<_>>()
                     .join("\n")
             }

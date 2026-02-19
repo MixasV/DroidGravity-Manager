@@ -241,7 +241,7 @@ async fn handle_streaming_response(
     response: reqwest::Response,
     model: String,
     email: String,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<Response, (StatusCode, String)> {
     use futures::stream::StreamExt;
     
     let stream = response.bytes_stream();
@@ -292,7 +292,7 @@ async fn handle_non_streaming_response(
     response: reqwest::Response,
     model: String,
     email: String,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<Response, (StatusCode, String)> {
     use futures::StreamExt;
     
     let stream = response.bytes_stream().map(|r| r.map_err(|e| e.to_string()));

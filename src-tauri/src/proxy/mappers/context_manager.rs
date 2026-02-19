@@ -111,8 +111,8 @@ impl ContextManager {
         // System prompt
         if let Some(sys) = &request.system {
             match sys {
-                SystemPrompt::String(s) => total += estimate_tokens_from_str(s),
-                SystemPrompt::Array(blocks) => {
+                SystemPrompt::Text(s) => total += estimate_tokens_from_str(s),
+                SystemPrompt::Blocks(blocks) => {
                     for block in blocks {
                         total += estimate_tokens_from_str(&block.text);
                     }

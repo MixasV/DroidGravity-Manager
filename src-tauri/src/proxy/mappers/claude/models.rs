@@ -49,8 +49,8 @@ pub struct ThinkingConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SystemPrompt {
-    String(String),
-    Array(Vec<SystemBlock>),
+    Text(String),
+    Blocks(Vec<SystemBlock>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

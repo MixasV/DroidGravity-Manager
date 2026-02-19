@@ -1,9 +1,7 @@
 // Kiro Response конвертация (Kiro → Anthropic Claude)
 // Non-streaming response
 
-use super::models::*;
 use crate::proxy::mappers::claude::models::{ClaudeResponse, ContentBlock, Usage};
-use serde_json::Value;
 
 /// Конвертирует собранный Kiro response в Claude формат
 pub fn convert_kiro_to_claude(
@@ -18,18 +16,18 @@ pub fn convert_kiro_to_claude(
         type_: "message".to_string(),
         role: "assistant".to_string(),
         content: vec![ContentBlock::Text {
-            type_: "text".to_string(),
             text: content,
             cache_control: None,
         }],
         model,
-        stop_reason: Some("end_turn".to_string()),
+        stop_reason: "end_turn".to_string(),
         stop_sequence: None,
         usage: Usage {
             input_tokens,
             output_tokens,
             cache_creation_input_tokens: None,
             cache_read_input_tokens: None,
+            server_tool_use: None,
         },
     }
 }

@@ -411,7 +411,7 @@ pub async fn get_user_balance(access_token: &str) -> Result<serde_json::Value, S
         "next_reset_at": chrono::Utc::now().timestamp() + 86400
     }))
 }
-pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenResponse, String> {
+pub async fn refresh_access_token(_refresh_token: &str) -> Result<KiroTokenResponse, String> {
     // For MVP, we'll skip token refresh and return an error
     // The tokens seem to be long-lived enough for testing
     crate::modules::logger::log_warn("Kiro token refresh is not implemented - tokens appear to be long-lived");

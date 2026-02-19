@@ -2,7 +2,6 @@
 
 use super::models::*;
 use crate::proxy::mappers::claude::models::{ClaudeRequest, Message as ClaudeMessage};
-use serde_json::Value;
 use uuid::Uuid;
 
 /// Конвертирует Anthropic Claude запрос в Kiro формат
@@ -81,8 +80,24 @@ fn build_current_message_content(claude_req: &ClaudeRequest) -> String {
     
     // Добавляем system prompt если есть
     if let Some(system) = &claude_req.system {
-        if !system.is_empty() {
-            content_parts.push(format!("<system>\n{}\n</system>", system));
+        let system_text = match system {
+            crate::proxy::mappers::claude::models::SystemPrompt::Text(text) => text.clone(),
+            crate::proxy::mappers::claude::models::SystemPrompt::Blocks(blocks) => {
+                blocks.iter()
+                    .filter_map(|b| {
+                        if let crate::proxy::mappers::claude::models::SystemBlock::Text { text, .. } = b {
+                            Some(text.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+        };
+        
+        if !system_text.is_empty() {
+            content_parts.push(format!("<system>\n{}\n</system>", system_text));
         }
     }
     
@@ -138,7 +153,7 @@ fn extract_text_from_message(msg: &ClaudeMessage) -> String {
     use crate::proxy::mappers::claude::models::MessageContent;
     
     match &msg.content {
-        MessageContent::Text(text) => text.clone(),
+        MessageContent::String(text) => text.clone(),
         MessageContent::Array(blocks) => {
             blocks
                 .iter()

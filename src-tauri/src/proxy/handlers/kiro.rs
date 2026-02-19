@@ -4,13 +4,12 @@
 use axum::{
     body::Body,
     extract::State,
-    http::{Request, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
 use bytes::Bytes;
-use futures::StreamExt;
-use serde_json::{json, Value};
+use serde_json::json;
 use tracing::{debug, error, info};
 
 use crate::proxy::{
@@ -56,7 +55,7 @@ pub async fn handle_kiro_messages(
     let mut conversation_id: Option<String> = None;
     
     // Определяем streaming mode
-    let is_stream = claude_req.stream.unwrap_or(false);
+    let is_stream = claude_req.stream;
     
     for attempt in 0..max_attempts {
         let force_rotate = attempt > 0;
@@ -285,8 +284,7 @@ async fn handle_streaming_response(
         .header("X-Account-Email", &email)
         .header("X-Mapped-Model", &model)
         .body(body)
-        .unwrap()
-        .into_response())
+        .unwrap())
 }
 
 /// Обрабатывает non-streaming response (собирает stream и конвертирует в Claude JSON)
@@ -295,7 +293,9 @@ async fn handle_non_streaming_response(
     model: String,
     email: String,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let stream = response.bytes_stream();
+    use futures::StreamExt;
+    
+    let stream = response.bytes_stream().map(|r| r.map_err(|e| e.to_string()));
     
     // Собираем весь stream в текст
     let full_text = match collect_stream_to_text(stream).await {
@@ -312,15 +312,12 @@ async fn handle_non_streaming_response(
     // Конвертируем в Claude формат
     let claude_response = convert_kiro_to_claude(full_text, model.clone(), None);
     
-    Ok((
-        StatusCode::OK,
-        [
-            ("X-Account-Email", email.as_str()),
-            ("X-Mapped-Model", model.as_str()),
-        ],
-        Json(claude_response),
-    )
-        .into_response())
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("X-Account-Email", &email)
+        .header("X-Mapped-Model", &model)
+        .body(Body::from(serde_json::to_string(&claude_response).unwrap()))
+        .unwrap())
 }
 
 /// Handle Kiro models list endpoint

@@ -1000,13 +1000,14 @@ pub async fn manual_kiro_token_input(
             (user_info.email, user_info.user_id)
         }
         Err(e) => {
-            crate::modules::logger::log_warning(&format!(
+            crate::modules::logger::log_warn(&format!(
                 "GetUserInfo failed (this is expected with manual tokens): {}",
                 e
             ));
             
             // Generate fallback user info from token
-            let fallback_email = format!("kiro-user-{}", uuid::Uuid::new_v4().to_string()[..8]);
+            let uuid_str = uuid::Uuid::new_v4().to_string();
+            let fallback_email = format!("kiro-user-{}", &uuid_str[..8]);
             let fallback_user_id = format!("manual-{}", uuid::Uuid::new_v4().to_string());
             
             crate::modules::logger::log_info(&format!(

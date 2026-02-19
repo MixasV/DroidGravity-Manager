@@ -1002,12 +1002,13 @@ dependencies = [
 
 [[package]]
 name = "droidgravity_manager"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "async-stream",
  "axum",
  "base64 0.22.1",
+ "byteorder",
  "bytes",
  "chrono",
  "dashmap",

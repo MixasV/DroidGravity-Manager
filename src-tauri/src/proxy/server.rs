@@ -344,6 +344,9 @@ impl AxumServer {
                 "/v1/models/claude",
                 get(handlers::claude::handle_list_models),
             )
+            // Kiro Protocol (Anthropic Claude API compatible)
+            .route("/kiro/v1/messages", post(handlers::kiro::handle_kiro_messages))
+            .route("/kiro/v1/models", get(handlers::kiro::handle_kiro_models))
             // z.ai MCP (optional reverse-proxy)
             .route(
                 "/mcp/web_search_prime/mcp",

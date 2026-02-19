@@ -1513,6 +1513,30 @@ impl TokenManager {
             .and_then(|t| t.individual_proxy.clone())
     }
 
+    /// Get Kiro profile ARN for account
+    pub async fn get_kiro_profile_arn(&self, account_id: &str) -> Result<String, String> {
+        // Читаем account файл из базы данных
+        let account_path = self.data_dir.join("accounts").join(format!("{}.json", account_id));
+        
+        if !account_path.exists() {
+            return Err(format!("Account file not found: {}", account_id));
+        }
+        
+        let account_json = tokio::fs::read_to_string(&account_path)
+            .await
+            .map_err(|e| format!("Failed to read account file: {}", e))?;
+        
+        let account: serde_json::Value = serde_json::from_str(&account_json)
+            .map_err(|e| format!("Failed to parse account JSON: {}", e))?;
+        
+        // Извлекаем kiro_profile_arn
+        account
+            .get("kiro_profile_arn")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "kiro_profile_arn not found in account".to_string())
+    }
+
     /// 通过 email 获取指定账号的 Token（用于预热等需要指定账号的场景）
     /// 此方法会自动刷新过期的 token
     pub async fn get_token_by_email(

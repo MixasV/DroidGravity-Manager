@@ -53,7 +53,11 @@ DOCKER_DEPLOYMENT.md
 
 # Kiro reverse engineering artifacts
 docs/kiro/
-scripts/*kiro-traffic*
+scripts/*kiro*
+scripts/frida-*
+scripts/patch-*
+scripts/run-*
+scripts/start-*
 .kiro/
 
 # Added by cargo

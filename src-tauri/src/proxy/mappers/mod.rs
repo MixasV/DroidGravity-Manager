@@ -4,6 +4,7 @@
 pub mod claude;
 pub mod common_utils;
 pub mod gemini;
+pub mod kiro;  // Kiro mapper
 pub mod openai;
 pub mod signature_store;
 pub mod context_manager;

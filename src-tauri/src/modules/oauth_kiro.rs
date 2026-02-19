@@ -238,11 +238,17 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     
     crate::modules::logger::log_info("Fetching Kiro user info...");
     
-    // Kiro API expects simple GET request with Authorization header
+    // Kiro API endpoint for GetUserInfo
+    let request_body = GetUserInfoRequest {
+        origin: "KIRO_IDE".to_string(),
+    };
+    
     let response = client
-        .get(format!("{}/api/user", KIRO_API_URL))
+        .post(format!("{}/service/KiroWebPortalService/GetUserInfo", KIRO_API_URL))
         .header("Authorization", format!("Bearer {}", access_token))
-        .header("User-Agent", "DroidGravity-Manager/2.0.0")
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "DroidGravity-Manager/2.0.2")
+        .json(&request_body)
         .send()
         .await
         .map_err(|e| format!("GetUserInfo request failed: {}", e))?;
@@ -277,8 +283,14 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
                         .and_then(|v| v.as_str())
                         .unwrap_or("unknown")
                         .to_string(),
-                    idp: "google".to_string(),
-                    status: "active".to_string(),
+                    idp: json_value.get("idp")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Google")
+                        .to_string(),
+                    status: json_value.get("status")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Active")
+                        .to_string(),
                     feature_flags: std::collections::HashMap::new(),
                 });
             }

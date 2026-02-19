@@ -31,7 +31,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     const [status, setStatus] = useState<Status>('idle');
     const [message, setMessage] = useState('');
 
-    const { completeOAuthLogin, cancelOAuthLogin, importFromDb, importV1Accounts, importFromCustomDb } = useAccountStore();
+    const { completeOAuthLogin, cancelOAuthLogin, importFromDb, importV1Accounts, importFromCustomDb, fetchAccounts } = useAccountStore();
 
     const oauthUrlRef = useRef(oauthUrl);
     const statusRef = useRef(status);
@@ -288,7 +288,11 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     const handleCompleteOAuth = () => {
         // Manual flow: user already authorized in their preferred browser, just finish the flow.
         const command = provider === 'kiro' ? 'complete_kiro_oauth_login' : 'complete_oauth_login';
-        handleAction(t('accounts.add.tabs.oauth'), () => invoke(command), { clearOauthUrl: false });
+        handleAction(t('accounts.add.tabs.oauth'), async () => {
+            await invoke(command);
+            // Refresh accounts list to show the new account
+            await fetchAccounts();
+        }, { clearOauthUrl: false });
     };
 
     const handleSubmitManualTokens = async () => {
@@ -305,6 +309,9 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                 refreshToken: manualRefreshToken.trim(),
                 expiresIn: 3600 // Default 1 hour
             });
+            
+            // Refresh accounts list to show the new Kiro account
+            await fetchAccounts();
         });
     };
 
@@ -329,7 +336,11 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
             // If URL parsing fails, assume it's already just the code
         }
 
-        handleAction('Submit Authorization Code', () => invoke('submit_kiro_oauth_code', { code }), { clearOauthUrl: false });
+        handleAction('Submit Authorization Code', async () => {
+            await invoke('submit_kiro_oauth_code', { code });
+            // Refresh accounts list to show the new Kiro account
+            await fetchAccounts();
+        }, { clearOauthUrl: false });
     };
 
     const handleCopyUrl = async () => {

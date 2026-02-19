@@ -17,7 +17,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
     const [provider, setProvider] = useState<'gemini' | 'kiro'>('kiro'); // Allow provider selection
-    const [activeTab, setActiveTab] = useState<'oauth' | 'token' | 'import'>('oauth');
+    const [activeTab, setActiveTab] = useState<'oauth' | 'token' | 'manual' | 'import'>('oauth');
     const [refreshToken, setRefreshToken] = useState('');
     const [oauthUrl, setOauthUrl] = useState('');
     const [oauthUrlCopied, setOauthUrlCopied] = useState(false);

@@ -2,7 +2,7 @@ export interface Account {
     id: string;
     email: string;
     name?: string;
-    provider?: string; // "gemini" or "kiro"
+    provider: string; // "gemini" or "kiro"
     kiro_profile_arn?: string; // Kiro-specific field
     kiro_user_id?: string; // Kiro-specific field
     token: TokenData;

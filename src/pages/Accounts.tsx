@@ -139,8 +139,8 @@ function Accounts() {
                 const tier = a.quota?.subscription_tier?.toLowerCase();
                 return tier && !tier.includes('pro') && !tier.includes('ultra');
             }).length,
-            gemini: searchedAccounts.filter(a => a.provider === 'gemini' || !a.provider).length,
-            kiro: searchedAccounts.filter(a => a.provider === 'kiro').length,
+            gemini: searchedAccounts.filter(a => (a.provider || 'gemini') === 'gemini').length,
+            kiro: searchedAccounts.filter(a => (a.provider || 'gemini') === 'kiro').length,
         };
     }, [searchedAccounts]);
 
@@ -158,9 +158,9 @@ function Accounts() {
                 return tier && !tier.includes('pro') && !tier.includes('ultra');
             });
         } else if (filter === 'gemini') {
-            result = result.filter(a => a.provider === 'gemini' || !a.provider);
+            result = result.filter(a => (a.provider || 'gemini') === 'gemini');
         } else if (filter === 'kiro') {
-            result = result.filter(a => a.provider === 'kiro');
+            result = result.filter(a => (a.provider || 'gemini') === 'kiro');
         }
 
         return result;

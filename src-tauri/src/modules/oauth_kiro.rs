@@ -135,12 +135,13 @@ pub async fn exchange_code(
         .map_err(|e| format!("GetToken request failed: {}", e))?;
     
     let status = response.status();
+    let headers = response.headers().clone(); // Клонируем заголовки до перемещения
     let response_text = response.text().await.unwrap_or_default();
     
     crate::modules::logger::log_info(&format!(
         "=== KIRO GETTOKEN RESPONSE ===\nStatus: {}\nHeaders: {:?}\nBody: {}",
         status,
-        response.headers(),
+        headers,
         &response_text
     ));
     

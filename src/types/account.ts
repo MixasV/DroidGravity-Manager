@@ -2,6 +2,9 @@ export interface Account {
     id: string;
     email: string;
     name?: string;
+    provider?: string; // "gemini" or "kiro"
+    kiro_profile_arn?: string; // Kiro-specific field
+    kiro_user_id?: string; // Kiro-specific field
     token: TokenData;
     device_profile?: DeviceProfile;
     device_history?: DeviceProfileVersion[];
@@ -12,6 +15,8 @@ export interface Account {
     proxy_disabled?: boolean;
     proxy_disabled_reason?: string;
     proxy_disabled_at?: number;
+    individual_proxy?: string; // Individual proxy for this account
+    protected_models?: string[]; // Protected models for this account
     created_at: number;
     last_used: number;
 }

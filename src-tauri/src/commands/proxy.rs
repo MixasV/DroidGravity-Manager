@@ -801,21 +801,37 @@ pub async fn start_kiro_oauth_login(
         account.provider
     ));
     
-    // Save account
-    crate::modules::account::save_account(&account)
+    // Save account using upsert_account to properly update the index
+    let saved_account = crate::modules::account::upsert_account(
+        account.email.clone(),
+        account.name.clone(),
+        account.token.clone(),
+    ).map_err(|e| {
+        crate::modules::logger::log_error(&format!("Failed to save account: {}", e));
+        e
+    })?;
+    
+    // Update the account with the saved ID and Kiro-specific fields
+    let mut final_account = saved_account;
+    final_account.provider = "kiro".to_string();
+    final_account.kiro_profile_arn = Some(tokens.profile_arn);
+    final_account.kiro_user_id = Some(user_info.user_id);
+    
+    // Save the updated account with Kiro fields
+    crate::modules::account::save_account(&final_account)
         .map_err(|e| {
-            crate::modules::logger::log_error(&format!("Failed to save account: {}", e));
+            crate::modules::logger::log_error(&format!("Failed to update Kiro fields: {}", e));
             e
         })?;
     
     crate::modules::logger::log_info(&format!(
         "=== KIRO ACCOUNT ADDED SUCCESSFULLY ===\nEmail: {}\nID: {}",
-        account.email,
-        account.id
+        final_account.email,
+        final_account.id
     ));
     
     // Emit success event
-    app_handle.emit("kiro-account-added", &account.email)
+    app_handle.emit("kiro-account-added", &final_account.email)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
     
     Ok(())
@@ -849,20 +865,33 @@ pub async fn complete_kiro_oauth_login(
     
     // Set Kiro-specific fields
     account.provider = "kiro".to_string();
-    account.kiro_profile_arn = Some(tokens.profile_arn);
-    account.kiro_user_id = Some(user_info.user_id);
+    account.kiro_profile_arn = Some(tokens.profile_arn.clone());
+    account.kiro_user_id = Some(user_info.user_id.clone());
     
-    // Save account
-    crate::modules::account::save_account(&account)?;
+    // Save account using upsert_account to properly update the index
+    let saved_account = crate::modules::account::upsert_account(
+        account.email.clone(),
+        account.name.clone(),
+        account.token.clone(),
+    )?;
+    
+    // Update the account with the saved ID and Kiro-specific fields
+    let mut final_account = saved_account;
+    final_account.provider = "kiro".to_string();
+    final_account.kiro_profile_arn = Some(tokens.profile_arn);
+    final_account.kiro_user_id = Some(user_info.user_id);
+    
+    // Save the updated account with Kiro fields
+    crate::modules::account::save_account(&final_account)?;
     
     crate::modules::logger::log_info(&format!(
         "Kiro account added successfully: {} ({})",
-        account.email,
-        account.id
+        final_account.email,
+        final_account.id
     ));
     
     // Emit success event
-    app_handle.emit("kiro-account-added", &account.email)
+    app_handle.emit("kiro-account-added", &final_account.email)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
     
     Ok(())
@@ -930,8 +959,8 @@ pub async fn submit_kiro_oauth_code(
     
     // Set Kiro-specific fields
     account.provider = "kiro".to_string();
-    account.kiro_profile_arn = Some(tokens.profile_arn);
-    account.kiro_user_id = Some(user_info.user_id);
+    account.kiro_profile_arn = Some(tokens.profile_arn.clone());
+    account.kiro_user_id = Some(user_info.user_id.clone());
     
     crate::modules::logger::log_info(&format!(
         "=== SAVING KIRO ACCOUNT ===\nAccount ID: {}\nEmail: {}\nProvider: {}",
@@ -940,21 +969,37 @@ pub async fn submit_kiro_oauth_code(
         account.provider
     ));
     
-    // Save account
-    crate::modules::account::save_account(&account)
+    // Save account using upsert_account to properly update the index
+    let saved_account = crate::modules::account::upsert_account(
+        account.email.clone(),
+        account.name.clone(),
+        account.token.clone(),
+    ).map_err(|e| {
+        crate::modules::logger::log_error(&format!("Failed to save account: {}", e));
+        e
+    })?;
+    
+    // Update the account with the saved ID and Kiro-specific fields
+    let mut final_account = saved_account;
+    final_account.provider = "kiro".to_string();
+    final_account.kiro_profile_arn = Some(tokens.profile_arn);
+    final_account.kiro_user_id = Some(user_info.user_id);
+    
+    // Save the updated account with Kiro fields
+    crate::modules::account::save_account(&final_account)
         .map_err(|e| {
-            crate::modules::logger::log_error(&format!("Failed to save account: {}", e));
+            crate::modules::logger::log_error(&format!("Failed to update Kiro fields: {}", e));
             e
         })?;
     
     crate::modules::logger::log_info(&format!(
         "=== KIRO ACCOUNT ADDED SUCCESSFULLY VIA MANUAL CODE ===\nEmail: {}\nID: {}",
-        account.email,
-        account.id
+        final_account.email,
+        final_account.id
     ));
     
     // Emit success event
-    app_handle.emit("kiro-account-added", &account.email)
+    app_handle.emit("kiro-account-added", &final_account.email)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
     
     Ok(())
@@ -1026,21 +1071,37 @@ pub async fn manual_kiro_token_input(
         account.provider
     ));
     
-    // Save account
-    crate::modules::account::save_account(&account)
+    // Save account using upsert_account to properly update the index
+    let saved_account = crate::modules::account::upsert_account(
+        account.email.clone(),
+        account.name.clone(),
+        account.token.clone(),
+    ).map_err(|e| {
+        crate::modules::logger::log_error(&format!("Failed to save account: {}", e));
+        e
+    })?;
+    
+    // Update the account with the saved ID and Kiro-specific fields
+    let mut final_account = saved_account;
+    final_account.provider = "kiro".to_string();
+    final_account.kiro_profile_arn = Some(tokens.profile_arn);
+    final_account.kiro_user_id = Some(fallback_user_id);
+    
+    // Save the updated account with Kiro fields
+    crate::modules::account::save_account(&final_account)
         .map_err(|e| {
-            crate::modules::logger::log_error(&format!("Failed to save account: {}", e));
+            crate::modules::logger::log_error(&format!("Failed to update Kiro fields: {}", e));
             e
         })?;
     
     crate::modules::logger::log_info(&format!(
         "=== KIRO ACCOUNT ADDED SUCCESSFULLY VIA MANUAL TOKENS ===\nEmail: {}\nID: {}",
-        account.email,
-        account.id
+        final_account.email,
+        final_account.id
     ));
     
     // Emit success event
-    app_handle.emit("kiro-account-added", &account.email)
+    app_handle.emit("kiro-account-added", &final_account.email)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
     
     Ok(())

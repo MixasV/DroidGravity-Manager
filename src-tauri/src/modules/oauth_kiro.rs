@@ -296,16 +296,46 @@ pub async fn manual_token_input(
 ) -> Result<KiroTokenResponse, String> {
     crate::modules::logger::log_info("Using manually provided Kiro tokens");
     
+    // Clean up tokens - remove parts after colon if present (cookie format)
+    let clean_access_token = if access_token.contains(':') {
+        let parts: Vec<&str> = access_token.split(':').collect();
+        crate::modules::logger::log_info(&format!(
+            "Access token contains colon, using first part (length: {} -> {})",
+            access_token.len(),
+            parts[0].len()
+        ));
+        parts[0].to_string()
+    } else {
+        access_token.to_string()
+    };
+    
+    let clean_refresh_token = if let Some(rt) = refresh_token {
+        if rt.contains(':') {
+            let parts: Vec<&str> = rt.split(':').collect();
+            crate::modules::logger::log_info(&format!(
+                "Refresh token contains colon, using first part (length: {} -> {})",
+                rt.len(),
+                parts[0].len()
+            ));
+            parts[0].to_string()
+        } else {
+            rt.to_string()
+        }
+    } else {
+        "".to_string()
+    };
+    
     let tokens = KiroTokenResponse {
-        access_token: access_token.to_string(),
-        refresh_token: refresh_token.unwrap_or("").to_string(),
+        access_token: clean_access_token.clone(),
+        refresh_token: clean_refresh_token.clone(),
         expires_in: expires_in.unwrap_or(3600),
         profile_arn: "arn:aws:codewhisperer:us-east-1:699475941385:profile/MANUAL".to_string(),
     };
     
     crate::modules::logger::log_info(&format!(
-        "Manual tokens configured: access_token={}..., expires_in={}s",
+        "Manual tokens configured: access_token={}..., refresh_token={}..., expires_in={}s",
         &tokens.access_token[..tokens.access_token.len().min(20)],
+        &tokens.refresh_token[..tokens.refresh_token.len().min(20)],
         tokens.expires_in
     ));
     
@@ -318,12 +348,25 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenRespon
     
     crate::modules::logger::log_info("Refreshing Kiro access token...");
     
-    // Kiro uses the same endpoint with refresh_token
+    // Clean refresh token if it contains colon (cookie format)
+    let clean_refresh_token = if refresh_token.contains(':') {
+        let parts: Vec<&str> = refresh_token.split(':').collect();
+        crate::modules::logger::log_info(&format!(
+            "Refresh token contains colon, using first part for refresh (length: {} -> {})",
+            refresh_token.len(),
+            parts[0].len()
+        ));
+        parts[0]
+    } else {
+        refresh_token
+    };
+    
+    // Try Kiro API refresh endpoint
     let mut request_body = serde_json::Map::new();
-    request_body.insert("refresh_token".to_string(), serde_json::Value::String(refresh_token.to_string()));
+    request_body.insert("refreshToken".to_string(), serde_json::Value::String(clean_refresh_token.to_string()));
     
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
+        .post(format!("{}/api/v1/GetToken", KIRO_API_URL))
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()
@@ -340,11 +383,36 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenRespon
     ));
     
     if status.is_success() {
-        let tokens: KiroTokenResponse = serde_json::from_str(&response_text)
-            .map_err(|e| format!("Failed to parse refresh response: {} (response: {})", e, &response_text[..response_text.len().min(200)]))?;
+        // Try to parse as KiroTokenResponse first
+        if let Ok(tokens) = serde_json::from_str::<KiroTokenResponse>(&response_text) {
+            crate::modules::logger::log_info("Kiro token refreshed successfully");
+            return Ok(tokens);
+        }
         
-        crate::modules::logger::log_info("Kiro token refreshed successfully");
-        Ok(tokens)
+        // Try to parse as generic JSON and convert
+        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
+            if let Some(access_token) = json_value.get("accessToken").and_then(|v| v.as_str()) {
+                let tokens = KiroTokenResponse {
+                    access_token: access_token.to_string(),
+                    refresh_token: json_value.get("refreshToken")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(clean_refresh_token)
+                        .to_string(),
+                    expires_in: json_value.get("expiresIn")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(3600),
+                    profile_arn: json_value.get("profileArn")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("arn:aws:codewhisperer:us-east-1:699475941385:profile/KIRO")
+                        .to_string(),
+                };
+                
+                crate::modules::logger::log_info("Kiro token refreshed successfully (converted format)");
+                return Ok(tokens);
+            }
+        }
+        
+        Err(format!("Failed to parse refresh response: {} (response: {})", "Invalid format", &response_text[..response_text.len().min(200)]))
     } else {
         Err(format!("Token refresh failed with status {}: {}", status, response_text))
     }

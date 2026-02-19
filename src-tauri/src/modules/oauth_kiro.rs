@@ -81,7 +81,7 @@ pub fn generate_pkce() -> (String, String) {
 }
 
 /// Initiate Kiro OAuth login - generate correct Cognito URL
-pub async fn initiate_login(redirect_uri: &str, auth_provider: Option<&str>) -> Result<(String, String, String), String> {
+pub async fn initiate_login(redirect_uri: &str, _auth_provider: Option<&str>) -> Result<(String, String, String), String> {
     // Generate PKCE
     let (code_verifier, code_challenge) = generate_pkce();
     let state = uuid::Uuid::new_v4().to_string();
@@ -295,97 +295,4 @@ pub async fn manual_token_input(
     ));
     
     Ok(tokens)
-}
-pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenResponse, String> {
-    let client = crate::utils::http::create_client(15);
-    
-    crate::modules::logger::log_info("Refreshing Kiro access token...");
-    
-    // Kiro uses the same endpoint with refresh_token
-    let mut request_body = serde_json::Map::new();
-    request_body.insert("refresh_token".to_string(), serde_json::Value::String(refresh_token.to_string()));
-    
-    let response = client
-        .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
-        .header("Content-Type", "application/json")
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| format!("Token refresh request failed: {}", e))?;
-    
-    let status = response.status();
-    let response_text = response.text().await.unwrap_or_default();
-    
-    crate::modules::logger::log_info(&format!(
-        "Token refresh response: status={}, body={}",
-        status,
-        &response_text[..response_text.len().min(500)]
-    ));
-    
-    if status.is_success() {
-        let tokens: KiroTokenResponse = serde_json::from_str(&response_text)
-            .map_err(|e| format!("Failed to parse refresh response: {} (response: {})", e, &response_text[..response_text.len().min(200)]))?;
-        
-        crate::modules::logger::log_info("Kiro token refreshed successfully");
-        Ok(tokens)
-    } else {
-        Err(format!("Token refresh failed with status {}: {}", status, response_text))
-    }
-}
-
-/// Refresh Kiro access token
-pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenResponse, String> {
-    let client = crate::utils::http::create_client(15);
-    
-    crate::modules::logger::log_info("Refreshing Kiro access token...");
-    
-    // Try Cognito refresh first
-    let cognito_url = "https://kiro-prod-us-east-1.auth.us-east-1.amazoncognito.com";
-    let client_id = "59bd15eh40ee7pc20h0bkcu7id";
-    
-    let refresh_data = format!(
-        "grant_type=refresh_token&client_id={}&refresh_token={}",
-        client_id,
-        refresh_token
-    );
-    
-    let response = client
-        .post(format!("{}/oauth2/token", cognito_url))
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(refresh_data)
-        .send()
-        .await
-        .map_err(|e| format!("Token refresh request failed: {}", e))?;
-    
-    let status = response.status();
-    let response_text = response.text().await.unwrap_or_default();
-    
-    crate::modules::logger::log_info(&format!(
-        "Token refresh response: status={}, body={}",
-        status,
-        &response_text[..response_text.len().min(500)]
-    ));
-    
-    if status.is_success() {
-        if let Ok(cognito_tokens) = serde_json::from_str::<serde_json::Value>(&response_text) {
-            if let Some(access_token) = cognito_tokens.get("access_token").and_then(|v| v.as_str()) {
-                let tokens = KiroTokenResponse {
-                    access_token: access_token.to_string(),
-                    refresh_token: cognito_tokens.get("refresh_token")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(refresh_token)
-                        .to_string(),
-                    expires_in: cognito_tokens.get("expires_in")
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(3600),
-                    profile_arn: "arn:aws:codewhisperer:us-east-1:699475941385:profile/COGNITO".to_string(),
-                };
-                
-                crate::modules::logger::log_info("Kiro token refreshed successfully via Cognito");
-                return Ok(tokens);
-            }
-        }
-    }
-    
-    Err(format!("Token refresh failed with status {}: {}", status, response_text))
 }

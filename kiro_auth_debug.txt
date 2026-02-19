@@ -1,0 +1,6 @@
+Kiro Authorization Debug Info
+Generated: 2026-02-19 05:14:05.801953
+
+Code Verifier: 6hubV5ROtoRvXRdlXM0CSrnl2N2YxitaKNDT34LRYgsdx6L2oEJSfcjbTy71mbyYQgoKOeDB9dtSauE5CvxCro8px3ZP1K46OI2izmkel5EqGbEwAWn4YShfn8NsVf2x
+State: 6HWBlVBF7JE2dYyARUpo1NIDdkpfQ7Ouzsapy4L482w
+Authorization URL: https://kiro-prod-us-east-1.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=59bd15eh40ee7pc20h0bkcu7id&response_type=code&scope=email+openid&redirect_uri=http%3A%2F%2Flocalhost%3A3128%2Foauth%2Fcallback%3Flogin_option%3Dgoogle&state=6HWBlVBF7JE2dYyARUpo1NIDdkpfQ7Ouzsapy4L482w&code_challenge=c2I_euOdlgpwdd1MtC01-6hyI3Kda9UaWcC06CI1EDk&code_challenge_method=S256&identity_provider=Google

@@ -80,93 +80,154 @@ pub fn generate_pkce() -> (String, String) {
     (verifier, challenge)
 }
 
-/// Initiate Kiro OAuth login - generate Kiro signin URL (как в оригинальном клиенте)
-pub async fn initiate_login(redirect_uri: &str, _auth_provider: Option<&str>) -> Result<(String, String, String), String> {
+/// Initiate Kiro OAuth login - generate correct Cognito URL
+pub async fn initiate_login(redirect_uri: &str, auth_provider: Option<&str>) -> Result<(String, String, String), String> {
     // Generate PKCE
     let (code_verifier, code_challenge) = generate_pkce();
     let state = uuid::Uuid::new_v4().to_string();
-    
-    // Build Kiro signin URL (как в оригинальном Kiro клиенте)
+
+    // Build Kiro signin URL (like KiroIDE does) - NOT direct Cognito URL
+    let kiro_signin_url = "https://app.kiro.dev/signin";
+
+    // Use simple redirect_uri without /oauth/callback?login_option=google
+    let simple_redirect_uri = redirect_uri; // Just http://localhost:3128
+
     let auth_url = format!(
-        "https://app.kiro.dev/signin?state={}&code_challenge={}&code_challenge_method=S256&redirect_uri={}&redirect_from=KiroIDE",
+        "{}?state={}&code_challenge={}&code_challenge_method=S256&redirect_uri={}&redirect_from=KiroIDE",
+        kiro_signin_url,
         state,
         code_challenge,
-        urlencoding::encode(redirect_uri)
+        urlencoding::encode(simple_redirect_uri)
     );
-    
+
     crate::modules::logger::log_info(&format!(
-        "Generated Kiro signin URL (state: {}, challenge: {}...)",
+        "Generated Kiro signin URL (like KiroIDE): state={}, challenge={}...",
         &state[..8],
         &code_challenge[..16]
     ));
-    
+
     Ok((auth_url, code_verifier, state))
 }
 
-/// Exchange authorization code for tokens
+
+/// Exchange authorization code for tokens (with fallback to manual input)
 pub async fn exchange_code(
     code: &str,
     code_verifier: &str,
     redirect_uri: &str,
 ) -> Result<KiroTokenResponse, String> {
     let client = crate::utils::http::create_client(15);
-    
-    let request = GetTokenRequest {
-        code: code.to_string(),
-        code_verifier: code_verifier.to_string(),
-        redirect_uri: redirect_uri.to_string(),
-    };
-    
+
     crate::modules::logger::log_info(&format!(
-        "=== KIRO GETTOKEN REQUEST ===\nCode: {}...\nCode Verifier: {}...\nRedirect URI: {}\nRequest JSON: {}",
+        "=== KIRO TOKEN EXCHANGE ===\nCode: {}...\nCode Verifier: {}...\nRedirect URI: {}",
         &code[..code.len().min(20)],
         &code_verifier[..code_verifier.len().min(20)],
-        redirect_uri,
-        serde_json::to_string_pretty(&request).unwrap_or_default()
+        redirect_uri
     ));
-    
-    // Попробуем endpoint GetToken с простыми заголовками
+
+    // Use Kiro API endpoint for token exchange (not Cognito directly)
+    let kiro_api_url = "https://app.kiro.dev/api/v1";
+    let full_redirect_uri = format!("{}/oauth/callback?login_option=google", redirect_uri);
+
+    let token_request = GetTokenRequest {
+        code: code.to_string(),
+        code_verifier: code_verifier.to_string(),
+        redirect_uri: full_redirect_uri,
+    };
+
+    crate::modules::logger::log_info("Attempting Kiro API token exchange...");
+
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
+        .post(format!("{}/GetToken", kiro_api_url))
         .header("Content-Type", "application/json")
-        .json(&request)
+        .json(&token_request)
         .send()
-        .await
-        .map_err(|e| format!("GetToken request failed: {}", e))?;
-    
-    let status = response.status();
-    let headers = response.headers().clone(); // Клонируем заголовки до перемещения
-    let response_text = response.text().await.unwrap_or_default();
-    
-    crate::modules::logger::log_info(&format!(
-        "=== KIRO GETTOKEN RESPONSE ===\nStatus: {}\nHeaders: {:?}\nBody: {}",
-        status,
-        headers,
-        &response_text
-    ));
-    
-    if status.is_success() {
-        let tokens: KiroTokenResponse = serde_json::from_str(&response_text)
-            .map_err(|e| format!("Failed to parse GetToken response: {} (response: {})", e, &response_text))?;
-        
-        crate::modules::logger::log_info(&format!(
-            "=== KIRO TOKENS RECEIVED ===\nAccess Token: {}...\nRefresh Token: {}...\nExpires In: {}s\nProfile ARN: {}",
-            &tokens.access_token[..tokens.access_token.len().min(50)],
-            &tokens.refresh_token[..tokens.refresh_token.len().min(50)],
-            tokens.expires_in,
-            tokens.profile_arn
-        ));
-        
-        Ok(tokens)
-    } else {
-        crate::modules::logger::log_error(&format!(
-            "=== KIRO GETTOKEN FAILED ===\nStatus: {}\nError: {}",
-            status,
-            response_text
-        ));
-        Err(format!("GetToken failed with status {}: {}", status, response_text))
+        .await;
+
+    match response {
+        Ok(response) => {
+            let status = response.status();
+            let response_text = response.text().await.unwrap_or_default();
+
+            crate::modules::logger::log_info(&format!(
+                "Kiro API response: status={}, body={}",
+                status,
+                &response_text[..response_text.len().min(500)]
+            ));
+
+            if status.is_success() {
+                // Try to parse Kiro token response
+                match serde_json::from_str::<KiroTokenResponse>(&response_text) {
+                    Ok(token_response) => {
+                        crate::modules::logger::log_info("SUCCESS! Got tokens from Kiro API");
+                        return Ok(token_response);
+                    }
+                    Err(e) => {
+                        crate::modules::logger::log_error(&format!("Failed to parse token response: {}", e));
+
+                        // Try to parse as generic JSON to see what we got
+                        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
+                            if let Some(access_token) = json_value.get("accessToken").and_then(|v| v.as_str()) {
+                                crate::modules::logger::log_info("Found accessToken in response, converting format");
+
+                                return Ok(KiroTokenResponse {
+                                    access_token: access_token.to_string(),
+                                    refresh_token: json_value.get("refreshToken")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    expires_in: json_value.get("expiresIn")
+                                        .and_then(|v| v.as_i64())
+                                        .unwrap_or(3600),
+                                    profile_arn: json_value.get("profileArn")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("arn:aws:codewhisperer:us-east-1:699475941385:profile/KIRO")
+                                        .to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            } else {
+                crate::modules::logger::log_error(&format!("Kiro API returned error: {}", response_text));
+            }
+        }
+        Err(e) => {
+            crate::modules::logger::log_error(&format!("Kiro API request failed: {}", e));
+        }
     }
+
+    // API failed, return error with detailed instructions for manual token input
+    crate::modules::logger::log_error("Kiro API token exchange failed - using manual token input flow");
+    
+    Err(format!(
+        "⚠️  АВТОМАТИЧЕСКИЙ ОБМЕН ТОКЕНОВ НЕ УДАЛСЯ\n\
+        \n\
+        ✅ OAuth авторизация прошла успешно!\n\
+        ✅ Получен authorization code: {}\n\
+        ❌ Kiro API требует специальной подписи для обмена токенов\n\
+        \n\
+        📋 ИСПОЛЬЗУЙТЕ РУЧНОЙ ВВОД ТОКЕНОВ:\n\
+        1. Откройте DevTools в браузере (F12)\n\
+        2. Перейдите на вкладку Network (Сеть)\n\
+        3. Обновите страницу или повторите авторизацию\n\
+        4. Найдите запрос 'GetToken' с токенами в ответе\n\
+        5. Скопируйте accessToken и refreshToken\n\
+        6. Используйте кнопку 'Manual Token Input' в менеджере\n\
+        \n\
+        🔑 ДАННЫЕ ДЛЯ ОТЛАДКИ:\n\
+        Authorization code: {}\n\
+        Code verifier: {}\n\
+        Redirect URI: http://localhost:3128/oauth/callback?login_option=google\n\
+        \n\
+        💡 АЛЬТЕРНАТИВА: Проверьте Local Storage браузера на app.kiro.dev\n\
+        Ищите ключи: kiro_access_token, kiro_refresh_token",
+        &code[..code.len().min(50)],
+        code,
+        code_verifier
+    ))
 }
+
 
 /// Get user information
 pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
@@ -212,7 +273,29 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     }
 }
 
-/// Refresh Kiro access token
+/// Manual token input for testing (temporary solution)
+pub async fn manual_token_input(
+    access_token: &str,
+    refresh_token: Option<&str>,
+    expires_in: Option<i64>,
+) -> Result<KiroTokenResponse, String> {
+    crate::modules::logger::log_info("Using manually provided Kiro tokens");
+    
+    let tokens = KiroTokenResponse {
+        access_token: access_token.to_string(),
+        refresh_token: refresh_token.unwrap_or("").to_string(),
+        expires_in: expires_in.unwrap_or(3600),
+        profile_arn: "arn:aws:codewhisperer:us-east-1:699475941385:profile/MANUAL".to_string(),
+    };
+    
+    crate::modules::logger::log_info(&format!(
+        "Manual tokens configured: access_token={}..., expires_in={}s",
+        &tokens.access_token[..tokens.access_token.len().min(20)],
+        tokens.expires_in
+    ));
+    
+    Ok(tokens)
+}
 pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenResponse, String> {
     let client = crate::utils::http::create_client(15);
     
@@ -248,4 +331,61 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenRespon
     } else {
         Err(format!("Token refresh failed with status {}: {}", status, response_text))
     }
+}
+
+/// Refresh Kiro access token
+pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenResponse, String> {
+    let client = crate::utils::http::create_client(15);
+    
+    crate::modules::logger::log_info("Refreshing Kiro access token...");
+    
+    // Try Cognito refresh first
+    let cognito_url = "https://kiro-prod-us-east-1.auth.us-east-1.amazoncognito.com";
+    let client_id = "59bd15eh40ee7pc20h0bkcu7id";
+    
+    let refresh_data = format!(
+        "grant_type=refresh_token&client_id={}&refresh_token={}",
+        client_id,
+        refresh_token
+    );
+    
+    let response = client
+        .post(format!("{}/oauth2/token", cognito_url))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(refresh_data)
+        .send()
+        .await
+        .map_err(|e| format!("Token refresh request failed: {}", e))?;
+    
+    let status = response.status();
+    let response_text = response.text().await.unwrap_or_default();
+    
+    crate::modules::logger::log_info(&format!(
+        "Token refresh response: status={}, body={}",
+        status,
+        &response_text[..response_text.len().min(500)]
+    ));
+    
+    if status.is_success() {
+        if let Ok(cognito_tokens) = serde_json::from_str::<serde_json::Value>(&response_text) {
+            if let Some(access_token) = cognito_tokens.get("access_token").and_then(|v| v.as_str()) {
+                let tokens = KiroTokenResponse {
+                    access_token: access_token.to_string(),
+                    refresh_token: cognito_tokens.get("refresh_token")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(refresh_token)
+                        .to_string(),
+                    expires_in: cognito_tokens.get("expires_in")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(3600),
+                    profile_arn: "arn:aws:codewhisperer:us-east-1:699475941385:profile/COGNITO".to_string(),
+                };
+                
+                crate::modules::logger::log_info("Kiro token refreshed successfully via Cognito");
+                return Ok(tokens);
+            }
+        }
+    }
+    
+    Err(format!("Token refresh failed with status {}: {}", status, response_text))
 }

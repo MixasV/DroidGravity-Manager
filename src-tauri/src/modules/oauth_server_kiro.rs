@@ -116,6 +116,16 @@ pub async fn prepare_kiro_oauth_url(
                                 full_url
                             ));
                             
+                            // Check if this is the OAuth callback path
+                            let is_oauth_callback = url_part.starts_with("/oauth/callback") || url_part.contains("code=");
+                            
+                            if !is_oauth_callback && !url_part.contains("code=") {
+                                // Not an OAuth callback, send simple OK response
+                                let _ = stream.write_all("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nOAuth callback server running...".as_bytes()).await;
+                                let _ = stream.flush().await;
+                                continue;
+                            }
+                            
                             match url::Url::parse(&full_url) {
                                 Ok(url) => {
                                     let mut code_opt = None;

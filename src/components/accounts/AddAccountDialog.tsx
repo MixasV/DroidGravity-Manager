@@ -16,13 +16,12 @@ type Status = 'idle' | 'loading' | 'success' | 'error';
 function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
-    const [provider, setProvider] = useState<'gemini' | 'kiro'>('gemini');
+    const [provider, setProvider] = useState<'gemini' | 'kiro'>('kiro');
     const [activeTab, setActiveTab] = useState<'oauth' | 'token' | 'import'>('oauth');
     const [refreshToken, setRefreshToken] = useState('');
     const [oauthUrl, setOauthUrl] = useState('');
     const [oauthUrlCopied, setOauthUrlCopied] = useState(false);
     const [manualCode, setManualCode] = useState(''); // For manual Kiro OAuth code input
-    const [kiroAuthProvider, setKiroAuthProvider] = useState<'google' | 'github'>('google'); // Kiro auth provider
 
     // UI State
     const [status, setStatus] = useState<Status>('idle');
@@ -147,7 +146,6 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         setOauthUrl('');
         setOauthUrlCopied(false);
         setManualCode('');
-        setKiroAuthProvider('google');
     };
 
     const handleAction = async (
@@ -394,34 +392,17 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                     <div className="modal-box bg-white dark:bg-base-100 text-gray-900 dark:text-base-content">
                         <h3 className="font-bold text-lg mb-4">{t('accounts.add.title')}</h3>
 
-                        {/* Provider Selection */}
-                        <div className="bg-gray-100 dark:bg-base-200 p-1 rounded-xl mb-4 grid grid-cols-2 gap-1">
-                            <button
-                                className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${provider === 'gemini'
-                                    ? 'bg-white dark:bg-base-100 shadow-sm text-blue-600 dark:text-blue-400'
-                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-base-300'
-                                    } `}
-                                onClick={() => {
-                                    setProvider('gemini');
-                                    setOauthUrl('');
-                                    setOauthUrlCopied(false);
-                                }}
-                            >
-                                🔷 Gemini
-                            </button>
-                            <button
-                                className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${provider === 'kiro'
-                                    ? 'bg-white dark:bg-base-100 shadow-sm text-purple-600 dark:text-purple-400'
-                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-base-300'
-                                    } `}
-                                onClick={() => {
-                                    setProvider('kiro');
-                                    setOauthUrl('');
-                                    setOauthUrlCopied(false);
-                                }}
-                            >
-                                🚀 Kiro
-                            </button>
+                        {/* Provider Selection - Always use Kiro with Google */}
+                        <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl mb-4 border border-purple-200 dark:border-purple-800">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+                                    <span className="text-white text-sm font-bold">🚀</span>
+                                </div>
+                                <div>
+                                    <h4 className="font-medium text-purple-900 dark:text-purple-100">Kiro Account</h4>
+                                    <p className="text-xs text-purple-600 dark:text-purple-300">Authorization via Google</p>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Tab 导航 - 胶囊风格 */}
@@ -462,44 +443,6 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                             {/* OAuth 授权 */}
                             {activeTab === 'oauth' && (
                                 <div className="space-y-6 py-4">
-                                    {/* Kiro Auth Provider Selection */}
-                                    {provider === 'kiro' && (
-                                        <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
-                                            <div className="text-sm font-medium text-purple-800 dark:text-purple-200 mb-2">
-                                                Choose Kiro Authorization Method:
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <button
-                                                    className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${kiroAuthProvider === 'google'
-                                                        ? 'bg-white dark:bg-purple-800 shadow-sm text-purple-600 dark:text-purple-200 border border-purple-300 dark:border-purple-600'
-                                                        : 'text-purple-500 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-800/50'
-                                                        }`}
-                                                    onClick={() => {
-                                                        setKiroAuthProvider('google');
-                                                        setOauthUrl(''); // Force regenerate URL
-                                                    }}
-                                                >
-                                                    🔍 Google
-                                                </button>
-                                                <button
-                                                    className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${kiroAuthProvider === 'github'
-                                                        ? 'bg-white dark:bg-purple-800 shadow-sm text-purple-600 dark:text-purple-200 border border-purple-300 dark:border-purple-600'
-                                                        : 'text-purple-500 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-200 hover:bg-purple-100 dark:hover:bg-purple-800/50'
-                                                        }`}
-                                                    onClick={() => {
-                                                        setKiroAuthProvider('github');
-                                                        setOauthUrl(''); // Force regenerate URL
-                                                    }}
-                                                >
-                                                    🐙 GitHub
-                                                </button>
-                                            </div>
-                                            <p className="text-xs text-purple-600 dark:text-purple-300 mt-2">
-                                                This determines which account you'll use to sign in to Kiro.
-                                            </p>
-                                        </div>
-                                    )}
-
                                     <div className="text-center space-y-3">
                                         <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-full w-20 h-20 mx-auto flex items-center justify-center">
                                             <Globe className="w-10 h-10 text-blue-500" />

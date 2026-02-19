@@ -296,3 +296,41 @@ pub async fn manual_token_input(
     
     Ok(tokens)
 }
+
+/// Refresh Kiro access token using refresh token
+pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenResponse, String> {
+    let client = crate::utils::http::create_client(15);
+    
+    crate::modules::logger::log_info("Refreshing Kiro access token...");
+    
+    // Kiro uses the same endpoint with refresh_token
+    let mut request_body = serde_json::Map::new();
+    request_body.insert("refresh_token".to_string(), serde_json::Value::String(refresh_token.to_string()));
+    
+    let response = client
+        .post(format!("{}/service/KiroWebPortalService/GetToken", KIRO_API_URL))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("Token refresh request failed: {}", e))?;
+    
+    let status = response.status();
+    let response_text = response.text().await.unwrap_or_default();
+    
+    crate::modules::logger::log_info(&format!(
+        "Token refresh response: status={}, body={}",
+        status,
+        &response_text[..response_text.len().min(500)]
+    ));
+    
+    if status.is_success() {
+        let tokens: KiroTokenResponse = serde_json::from_str(&response_text)
+            .map_err(|e| format!("Failed to parse refresh response: {} (response: {})", e, &response_text[..response_text.len().min(200)]))?;
+        
+        crate::modules::logger::log_info("Kiro token refreshed successfully");
+        Ok(tokens)
+    } else {
+        Err(format!("Token refresh failed with status {}: {}", status, response_text))
+    }
+}

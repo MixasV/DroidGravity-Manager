@@ -16,12 +16,16 @@ type Status = 'idle' | 'loading' | 'success' | 'error';
 function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     const { t } = useTranslation();
     const [isOpen, setIsOpen] = useState(false);
-    const provider = 'kiro'; // Always Kiro
+    const [provider, setProvider] = useState<'gemini' | 'kiro'>('kiro'); // Allow provider selection
     const [activeTab, setActiveTab] = useState<'oauth' | 'token' | 'import'>('oauth');
     const [refreshToken, setRefreshToken] = useState('');
     const [oauthUrl, setOauthUrl] = useState('');
     const [oauthUrlCopied, setOauthUrlCopied] = useState(false);
     const [manualCode, setManualCode] = useState(''); // For manual Kiro OAuth code input
+    
+    // Manual token input fields for Kiro
+    const [manualAccessToken, setManualAccessToken] = useState('');
+    const [manualRefreshToken, setManualRefreshToken] = useState('');
 
     // UI State
     const [status, setStatus] = useState<Status>('idle');
@@ -146,6 +150,8 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         setOauthUrl('');
         setOauthUrlCopied(false);
         setManualCode('');
+        setManualAccessToken('');
+        setManualRefreshToken('');
     };
 
     const handleAction = async (
@@ -285,6 +291,23 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         handleAction(t('accounts.add.tabs.oauth'), () => invoke(command), { clearOauthUrl: false });
     };
 
+    const handleSubmitManualTokens = async () => {
+        if (!manualAccessToken.trim() || !manualRefreshToken.trim()) {
+            setStatus('error');
+            setMessage('Please enter both Access Token and Refresh Token');
+            return;
+        }
+
+        handleAction('Add Kiro Account with Manual Tokens', async () => {
+            // Use manual_token_input command for Kiro
+            await invoke('manual_kiro_token_input', {
+                accessToken: manualAccessToken.trim(),
+                refreshToken: manualRefreshToken.trim(),
+                expiresIn: 3600 // Default 1 hour
+            });
+        });
+    };
+
     const handleSubmitManualCode = () => {
         if (!manualCode.trim()) {
             setStatus('error');
@@ -392,21 +415,53 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                     <div className="modal-box bg-white dark:bg-base-100 text-gray-900 dark:text-base-content">
                         <h3 className="font-bold text-lg mb-4">{t('accounts.add.title')}</h3>
 
-                        {/* Provider Selection - Always use Kiro with Google */}
-                        <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl mb-4 border border-purple-200 dark:border-purple-800">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-                                    <span className="text-white text-sm font-bold">🚀</span>
-                                </div>
-                                <div>
-                                    <h4 className="font-medium text-purple-900 dark:text-purple-100">Kiro Account</h4>
-                                    <p className="text-xs text-purple-600 dark:text-purple-300">Authorization via Google</p>
-                                </div>
+                        {/* Provider Selection */}
+                        <div className="mb-4">
+                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                                Select Provider:
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    className={`p-3 rounded-xl border transition-all ${
+                                        provider === 'gemini'
+                                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
+                                            : 'bg-gray-50 dark:bg-base-200 border-gray-200 dark:border-base-300 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-base-300'
+                                    }`}
+                                    onClick={() => setProvider('gemini')}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 bg-blue-600 rounded-lg flex items-center justify-center">
+                                            <span className="text-white text-xs font-bold">G</span>
+                                        </div>
+                                        <div className="text-left">
+                                            <div className="font-medium text-sm">Google Gemini</div>
+                                            <div className="text-xs opacity-70">OAuth via Google</div>
+                                        </div>
+                                    </div>
+                                </button>
+                                <button
+                                    className={`p-3 rounded-xl border transition-all ${
+                                        provider === 'kiro'
+                                            ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300'
+                                            : 'bg-gray-50 dark:bg-base-200 border-gray-200 dark:border-base-300 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-base-300'
+                                    }`}
+                                    onClick={() => setProvider('kiro')}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 bg-purple-600 rounded-lg flex items-center justify-center">
+                                            <span className="text-white text-xs font-bold">🚀</span>
+                                        </div>
+                                        <div className="text-left">
+                                            <div className="font-medium text-sm">Kiro</div>
+                                            <div className="text-xs opacity-70">OAuth via Google</div>
+                                        </div>
+                                    </div>
+                                </button>
                             </div>
                         </div>
 
-                        {/* Tab 导航 - 胶囊风格 */}
-                        <div className="bg-gray-100 dark:bg-base-200 p-1 rounded-xl mb-6 grid grid-cols-3 gap-1">
+                        {/* Tab 导航 -胶囊风格 */}
+                        <div className={`bg-gray-100 dark:bg-base-200 p-1 rounded-xl mb-6 grid gap-1 ${provider === 'kiro' ? 'grid-cols-4' : 'grid-cols-3'}`}>
                             <button
                                 className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'oauth'
                                     ? 'bg-white dark:bg-base-100 shadow-sm text-blue-600 dark:text-blue-400'
@@ -425,6 +480,17 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                             >
                                 {t('accounts.add.tabs.token')}
                             </button>
+                            {provider === 'kiro' && (
+                                <button
+                                    className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'manual'
+                                        ? 'bg-white dark:bg-base-100 shadow-sm text-blue-600 dark:text-blue-400'
+                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-base-300'
+                                        } `}
+                                    onClick={() => setActiveTab('manual')}
+                                >
+                                    Manual Tokens
+                                </button>
+                            )}
                             <button
                                 className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'import'
                                     ? 'bg-white dark:bg-base-100 shadow-sm text-blue-600 dark:text-blue-400'
@@ -531,6 +597,54 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                                 </div>
                             )}
 
+                            {/* Manual Token Input for Kiro */}
+                            {activeTab === 'manual' && provider === 'kiro' && (
+                                <div className="space-y-4 py-2">
+                                    <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                                        <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
+                                            📋 Manual Token Input from Browser Cookies
+                                        </h4>
+                                        <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+                                            After successful OAuth authorization, extract tokens from browser cookies:
+                                        </p>
+                                        <ol className="text-xs text-yellow-600 dark:text-yellow-400 space-y-1 ml-4 list-decimal">
+                                            <li>Open DevTools (F12) → Application → Cookies → app.kiro.dev</li>
+                                            <li>Find and copy <code className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">AccessToken</code> value</li>
+                                            <li>Find and copy <code className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">RefreshToken</code> value</li>
+                                            <li>Paste both tokens below and click Add Account</li>
+                                        </ol>
+                                    </div>
+                                    
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                                                Access Token:
+                                            </label>
+                                            <textarea
+                                                className="w-full h-20 px-3 py-2 text-xs font-mono bg-white dark:bg-base-100 border border-gray-300 dark:border-base-300 rounded-lg focus:outline-none focus:border-blue-500 transition-colors resize-none"
+                                                placeholder="Paste AccessToken from browser cookies here..."
+                                                value={manualAccessToken}
+                                                onChange={(e) => setManualAccessToken(e.target.value)}
+                                                disabled={status === 'loading' || status === 'success'}
+                                            />
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                                                Refresh Token:
+                                            </label>
+                                            <textarea
+                                                className="w-full h-20 px-3 py-2 text-xs font-mono bg-white dark:bg-base-100 border border-gray-300 dark:border-base-300 rounded-lg focus:outline-none focus:border-blue-500 transition-colors resize-none"
+                                                placeholder="Paste RefreshToken from browser cookies here..."
+                                                value={manualRefreshToken}
+                                                onChange={(e) => setManualRefreshToken(e.target.value)}
+                                                disabled={status === 'loading' || status === 'success'}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Refresh Token */}
                             {activeTab === 'token' && (
                                 <div className="space-y-4 py-2">
@@ -625,6 +739,16 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                                 >
                                     {status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                                     {t('accounts.add.btn_confirm')}
+                                </button>
+                            )}
+                            {activeTab === 'manual' && provider === 'kiro' && (
+                                <button
+                                    className="flex-1 px-4 py-2.5 text-white font-medium rounded-xl shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 bg-purple-500 hover:bg-purple-600 focus:ring-purple-500 shadow-purple-100 dark:shadow-purple-900/30 flex justify-center items-center gap-2"
+                                    onClick={handleSubmitManualTokens}
+                                    disabled={status === 'loading' || status === 'success' || !manualAccessToken.trim() || !manualRefreshToken.trim()}
+                                >
+                                    {status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                                    Add Kiro Account
                                 </button>
                             )}
                         </div>

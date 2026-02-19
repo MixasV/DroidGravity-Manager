@@ -153,6 +153,7 @@ pub fn run() {
             commands::proxy::complete_kiro_oauth_login,
             commands::proxy::cancel_kiro_oauth_login,
             commands::proxy::submit_kiro_oauth_code,
+            commands::proxy::manual_kiro_token_input,
             // Debug Console 命令
             modules::log_bridge::enable_debug_console,
             modules::log_bridge::disable_debug_console,

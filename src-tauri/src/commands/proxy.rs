@@ -959,3 +959,93 @@ pub async fn submit_kiro_oauth_code(
     
     Ok(())
 }
+
+/// Manual Kiro token input (from browser cookies)
+#[tauri::command]
+pub async fn manual_kiro_token_input(
+    access_token: String,
+    refresh_token: String,
+    expires_in: Option<i64>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    crate::modules::logger::log_info(&format!(
+        "=== MANUAL KIRO TOKEN INPUT ===\nAccess Token: {}...\nRefresh Token: {}...",
+        &access_token[..access_token.len().min(50)],
+        &refresh_token[..refresh_token.len().min(50)]
+    ));
+    
+    // Use manual_token_input from oauth_kiro module
+    let tokens = crate::modules::oauth_kiro::manual_token_input(
+        &access_token,
+        Some(&refresh_token),
+        expires_in,
+    ).await
+        .map_err(|e| {
+            crate::modules::logger::log_error(&format!("Manual token input failed: {}", e));
+            e
+        })?;
+    
+    crate::modules::logger::log_info("=== MANUAL TOKENS ACCEPTED, GETTING USER INFO ===");
+    
+    // Get user info using the access token
+    let user_info = crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await
+        .map_err(|e| {
+            crate::modules::logger::log_error(&format!("GetUserInfo failed: {}", e));
+            e
+        })?;
+    
+    crate::modules::logger::log_info(&format!(
+        "=== USER INFO RECEIVED ===\nEmail: {}\nUser ID: {}\nIDP: {}\nStatus: {}",
+        user_info.email,
+        user_info.user_id,
+        user_info.idp,
+        user_info.status
+    ));
+    
+    // Create account
+    let token_data = crate::models::TokenData::new(
+        tokens.access_token,
+        tokens.refresh_token,
+        tokens.expires_in,
+        Some(user_info.email.clone()),
+        None, // project_id not used for Kiro
+        None, // session_id
+    );
+    
+    let mut account = crate::models::Account::new(
+        user_info.user_id.clone(),
+        user_info.email.clone(),
+        token_data,
+    );
+    
+    // Set Kiro-specific fields
+    account.provider = "kiro".to_string();
+    account.kiro_profile_arn = Some(tokens.profile_arn);
+    account.kiro_user_id = Some(user_info.user_id);
+    
+    crate::modules::logger::log_info(&format!(
+        "=== SAVING KIRO ACCOUNT ===\nAccount ID: {}\nEmail: {}\nProvider: {}",
+        account.id,
+        account.email,
+        account.provider
+    ));
+    
+    // Save account
+    crate::modules::account::save_account(&account)
+        .map_err(|e| {
+            crate::modules::logger::log_error(&format!("Failed to save account: {}", e));
+            e
+        })?;
+    
+    crate::modules::logger::log_info(&format!(
+        "=== KIRO ACCOUNT ADDED SUCCESSFULLY VIA MANUAL TOKENS ===\nEmail: {}\nID: {}",
+        account.email,
+        account.id
+    ));
+    
+    // Emit success event
+    app_handle.emit("kiro-account-added", &account.email)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    
+    Ok(())
+}

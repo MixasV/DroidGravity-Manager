@@ -88,7 +88,7 @@ fn extract_model_id(model: &str) -> String {
     }
     
     // Остальные модели (qwen3-coder-next, auto) возвращаем без изменений
-    clean_model.to_string();
+    clean_model.to_string()
 }
 
 /// Строит контент текущего сообщения из последнего user message

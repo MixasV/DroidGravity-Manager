@@ -387,7 +387,7 @@ pub async fn handle_messages(
     
     // 3. 准备闭包
     let mut request_for_body = request.clone();
-    let token_manager = state.token_manager;
+    let token_manager = state.token_manager.clone();
     
     let pool_size = token_manager.len();
     // [FIX] Ensure max_attempts is at least 2 to allow for internal retries (e.g. stripping signatures)

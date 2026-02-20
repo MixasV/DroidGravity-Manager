@@ -406,11 +406,27 @@ pub async fn get_user_usage_and_limits(access_token: &str) -> Result<serde_json:
     }
     
     // Decode CBOR response
+    // First, try to log raw bytes for debugging
+    crate::modules::logger::log_info(&format!(
+        "CBOR response bytes (first 100): {:?}",
+        &response_bytes[..response_bytes.len().min(100)]
+    ));
+    
     let json_value: serde_json::Value = ciborium::de::from_reader(&response_bytes[..])
         .map_err(|e| {
-            let error_msg = format!("Failed to decode CBOR response: {}", e);
+            let error_msg = format!("Failed to decode CBOR response: {}. Response bytes length: {}", e, response_bytes.len());
             crate::modules::logger::log_error(&error_msg);
-            error_msg
+            
+            // Try to decode as plain JSON as fallback
+            if let Ok(text) = String::from_utf8(response_bytes.to_vec()) {
+                crate::modules::logger::log_info(&format!("Response as text: {}", &text[..text.len().min(500)]));
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                    crate::modules::logger::log_info("Successfully parsed as JSON instead of CBOR");
+                    return Ok(json);
+                }
+            }
+            
+            Err(error_msg)
         })?;
     
     crate::modules::logger::log_info("✅ Successfully parsed usage and limits from CBOR");

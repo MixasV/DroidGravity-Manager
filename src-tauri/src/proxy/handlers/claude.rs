@@ -438,8 +438,14 @@ pub async fn handle_messages(
         });
 
         let force_rotate_token = attempt > 0;
+        
+        // [NEW] Determine provider (quota_group) by model name
+        // Kiro models: auto, claude-sonnet-4, claude-haiku-4-5, deepseek-3, etc.
+        // All other models use Gemini provider
+        let quota_group = crate::proxy::common::model_mapping::determine_provider_by_model(&request_for_body.model);
+        
         let (access_token, project_id, email, account_id, _wait_ms) = match token_manager.get_token(
-            &config.request_type, 
+            quota_group,
             force_rotate_token, 
             session_id, 
             &config.final_model,
@@ -470,7 +476,16 @@ pub async fn handle_messages(
         };
 
         last_email = Some(email.clone());
-        info!("✓ Using account: {} (type: {})", email, config.request_type);
+        info!("✓ Using account: {} (provider: {})", email, quota_group);
+        
+        // [NEW] Route to Kiro handler if using Kiro provider
+        if quota_group == "kiro" {
+            info!("Routing to Kiro handler for model: {}", request_for_body.model);
+            return crate::proxy::handlers::kiro::handle_kiro_messages(
+                State(state.clone()),
+                Json(request_for_body.clone())
+            ).await.into_response();
+        }
         
         
         // ===== 【优化】后台任务智能检测与降级 =====

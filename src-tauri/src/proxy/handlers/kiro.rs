@@ -263,7 +263,48 @@ async fn handle_streaming_response(
     
     let stream = response.bytes_stream();
     
-    let claude_stream = stream.flat_map(move |chunk_result| {
+    // Генерируем ID для сообщения
+    let message_id = format!("msg_{}", uuid::Uuid::new_v4().simple());
+    
+    // Создаем начальные события
+    let message_start = json!({
+        "type": "message_start",
+        "message": {
+            "id": message_id,
+            "type": "message",
+            "role": "assistant",
+            "content": [],
+            "model": model,
+            "stop_reason": null,
+            "stop_sequence": null,
+            "usage": {
+                "input_tokens": 0,
+                "output_tokens": 0
+            }
+        }
+    });
+    
+    let content_block_start = json!({
+        "type": "content_block_start",
+        "index": 0,
+        "content_block": {
+            "type": "text",
+            "text": ""
+        }
+    });
+    
+    let message_start_sse = format!("event: message_start\ndata: {}\n\n", 
+        serde_json::to_string(&message_start).unwrap());
+    let content_block_start_sse = format!("event: content_block_start\ndata: {}\n\n", 
+        serde_json::to_string(&content_block_start).unwrap());
+    
+    // Создаем начальный chunk с обоими событиями
+    let initial_chunk = format!("{}{}", message_start_sse, content_block_start_sse);
+    
+    let claude_stream = futures::stream::once(async move {
+        Ok::<Bytes, String>(Bytes::from(initial_chunk))
+    })
+    .chain(stream.flat_map(move |chunk_result| {
         match chunk_result {
             Ok(chunk) => {
                 // Парсим AWS Event Stream
@@ -289,7 +330,39 @@ async fn handle_streaming_response(
                 futures::stream::iter(vec![Err(format!("Stream error: {}", e))])
             }
         }
-    });
+    }))
+    .chain(futures::stream::once(async {
+        // Добавляем завершающие события
+        let content_block_stop = json!({
+            "type": "content_block_stop",
+            "index": 0
+        });
+        
+        let message_delta = json!({
+            "type": "message_delta",
+            "delta": {
+                "stop_reason": "end_turn",
+                "stop_sequence": null
+            },
+            "usage": {
+                "output_tokens": 0
+            }
+        });
+        
+        let message_stop = json!({
+            "type": "message_stop"
+        });
+        
+        let content_block_stop_sse = format!("event: content_block_stop\ndata: {}\n\n", 
+            serde_json::to_string(&content_block_stop).unwrap());
+        let message_delta_sse = format!("event: message_delta\ndata: {}\n\n", 
+            serde_json::to_string(&message_delta).unwrap());
+        let message_stop_sse = format!("event: message_stop\ndata: {}\n\n", 
+            serde_json::to_string(&message_stop).unwrap());
+        
+        Ok::<Bytes, String>(Bytes::from(format!("{}{}{}", 
+            content_block_stop_sse, message_delta_sse, message_stop_sse)))
+    }));
     
     let body = Body::from_stream(claude_stream);
     

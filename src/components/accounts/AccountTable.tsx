@@ -235,10 +235,24 @@ function AccountRowContent({
     onToggleProxy,
 }: AccountRowContentProps) {
     const { t } = useTranslation();
+    
+    // Check if this is a Kiro account
+    const isKiro = account.provider === 'kiro';
+    
+    // Gemini models
     const geminiProModel = account.quota?.models.find(m => m.name.toLowerCase() === 'gemini-3-pro-high');
     const geminiFlashModel = account.quota?.models.find(m => m.name.toLowerCase() === 'gemini-3-flash');
     const geminiImageModel = account.quota?.models.find(m => m.name.toLowerCase() === 'gemini-3-pro-image');
     const claudeModel = account.quota?.models.find(m => m.name.toLowerCase() === 'claude-sonnet-4-5-thinking');
+    
+    // Kiro credits data
+    const kiroCredits = account.quota?.models.find(m => m.name === 'kiro-credits');
+    const kiroMonthlyLimit = parseFloat(account.quota?.models.find(m => m.name === 'kiro-monthly-limit')?.reset_time || '0');
+    const kiroMonthlyUsed = parseFloat(account.quota?.models.find(m => m.name === 'kiro-monthly-used')?.reset_time || '0');
+    const kiroTrialLimit = parseFloat(account.quota?.models.find(m => m.name === 'kiro-trial-limit')?.reset_time || '0');
+    const kiroTrialUsed = parseFloat(account.quota?.models.find(m => m.name === 'kiro-trial-used')?.reset_time || '0');
+    const kiroTrialStatus = account.quota?.models.find(m => m.name === 'kiro-trial-status')?.reset_time || 'INACTIVE';
+    
     const isDisabled = Boolean(account.disabled);
 
     return (
@@ -324,7 +338,67 @@ function AccountRowContent({
                         <Ban className="w-4 h-4 shrink-0" />
                         <span>{t('accounts.forbidden_msg')}</span>
                     </div>
+                ) : isKiro ? (
+                    /* Kiro Credits Display */
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 py-0">
+                        {/* Total Credits */}
+                        <div className="relative h-[22px] flex items-center px-1.5 rounded-md overflow-hidden border border-gray-100/50 dark:border-white/5 bg-gray-50/30 dark:bg-white/5">
+                            {kiroCredits && (
+                                <div
+                                    className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out opacity-15 dark:opacity-20 ${getColorClass(kiroCredits.percentage)}`}
+                                    style={{ width: `${kiroCredits.percentage}%` }}
+                                />
+                            )}
+                            <div className="relative z-10 w-full flex items-center text-[10px] font-mono leading-none">
+                                <span className="w-[54px] text-gray-500 dark:text-gray-400 font-bold truncate pr-1">Total</span>
+                                <div className="flex-1 flex justify-center">
+                                    <span className="text-gray-500 dark:text-gray-400 font-medium">
+                                        {((kiroMonthlyLimit + kiroTrialLimit) - (kiroMonthlyUsed + kiroTrialUsed)).toFixed(1)}
+                                    </span>
+                                </div>
+                                <span className={cn("w-[36px] text-right font-bold transition-colors",
+                                    getQuotaColor(kiroCredits?.percentage || 0) === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
+                                        getQuotaColor(kiroCredits?.percentage || 0) === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
+                                )}>
+                                    {kiroCredits?.percentage || 0}%
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Monthly Credits */}
+                        <div className="relative h-[22px] flex items-center px-1.5 rounded-md overflow-hidden border border-gray-100/50 dark:border-white/5 bg-blue-50/30 dark:bg-blue-900/10">
+                            <div className="relative z-10 w-full flex items-center text-[10px] font-mono leading-none">
+                                <span className="w-[54px] text-gray-500 dark:text-gray-400 font-bold truncate pr-1">Monthly</span>
+                                <div className="flex-1 flex justify-center">
+                                    <span className="text-blue-600 dark:text-blue-400 font-bold">
+                                        {(kiroMonthlyLimit - kiroMonthlyUsed).toFixed(1)}
+                                    </span>
+                                </div>
+                                <span className="w-[36px] text-right text-gray-500 dark:text-gray-400 font-medium">
+                                    /{kiroMonthlyLimit.toFixed(0)}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Free Trial Credits */}
+                        {kiroTrialStatus === 'ACTIVE' && kiroTrialLimit > 0 && (
+                            <div className="relative h-[22px] flex items-center px-1.5 rounded-md overflow-hidden border border-gray-100/50 dark:border-white/5 bg-emerald-50/30 dark:bg-emerald-900/10 col-span-2">
+                                <div className="relative z-10 w-full flex items-center text-[10px] font-mono leading-none">
+                                    <span className="w-[54px] text-gray-500 dark:text-gray-400 font-bold truncate pr-1">Trial</span>
+                                    <div className="flex-1 flex justify-center">
+                                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                            {(kiroTrialLimit - kiroTrialUsed).toFixed(1)}
+                                        </span>
+                                    </div>
+                                    <span className="w-[36px] text-right text-gray-500 dark:text-gray-400 font-medium">
+                                        /{kiroTrialLimit.toFixed(0)}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 ) : (
+                    /* Gemini Models Display */
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 py-0">
                         {/* Gemini Pro */}
                         <div className="relative h-[22px] flex items-center px-1.5 rounded-md overflow-hidden border border-gray-100/50 dark:border-white/5 bg-gray-50/30 dark:bg-white/5 group/quota">

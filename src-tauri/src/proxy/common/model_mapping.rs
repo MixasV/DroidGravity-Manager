@@ -323,7 +323,9 @@ pub fn determine_provider_by_model(model: &str) -> &'static str {
         || model == "claude-opus-4-5"
         || model == "claude-opus-4-6"
         || model == "deepseek-3"
+        || model == "deepseek-3.2"  // Правильное название
         || model == "minimax-2-1"
+        || model == "minimax-m2.1"  // Правильное название
         || model == "qwen3-coder-next"
     {
         return "kiro";

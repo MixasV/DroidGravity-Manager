@@ -23,10 +23,24 @@ interface AccountCardProps {
 
 function AccountCard({ account, selected, onSelect, isCurrent, isRefreshing, isSwitching = false, onSwitch, onRefresh, onViewDetails, onExport, onDelete, onToggleProxy, onViewDevice }: AccountCardProps) {
     const { t } = useTranslation();
+    
+    // Check if this is a Kiro account
+    const isKiro = account.provider === 'kiro';
+    
+    // Gemini models
     const geminiProModel = account.quota?.models.find(m => m.name === 'gemini-3-pro-high');
     const geminiFlashModel = account.quota?.models.find(m => m.name === 'gemini-3-flash');
     const geminiImageModel = account.quota?.models.find(m => m.name === 'gemini-3-pro-image');
     const claudeModel = account.quota?.models.find(m => m.name === 'claude-sonnet-4-5-thinking');
+    
+    // Kiro credits data
+    const kiroCredits = account.quota?.models.find(m => m.name === 'kiro-credits');
+    const kiroMonthlyLimit = parseFloat(account.quota?.models.find(m => m.name === 'kiro-monthly-limit')?.reset_time || '0');
+    const kiroMonthlyUsed = parseFloat(account.quota?.models.find(m => m.name === 'kiro-monthly-used')?.reset_time || '0');
+    const kiroTrialLimit = parseFloat(account.quota?.models.find(m => m.name === 'kiro-trial-limit')?.reset_time || '0');
+    const kiroTrialUsed = parseFloat(account.quota?.models.find(m => m.name === 'kiro-trial-used')?.reset_time || '0');
+    const kiroTrialStatus = account.quota?.models.find(m => m.name === 'kiro-trial-status')?.reset_time || 'INACTIVE';
+    
     const isDisabled = Boolean(account.disabled);
 
     const getColorClass = (percentage: number) => {
@@ -133,7 +147,58 @@ function AccountCard({ account, selected, onSelect, isCurrent, isRefreshing, isS
                         <Ban className="w-4 h-4 shrink-0" />
                         <span>{t('accounts.forbidden_msg')}</span>
                     </div>
+                ) : isKiro ? (
+                    /* Kiro Credits Display */
+                    <div className="space-y-1.5">
+                        {/* Total Credits Bar */}
+                        <div className="relative h-[32px] flex items-center px-2 rounded-lg overflow-hidden border border-gray-100/50 dark:border-white/5 bg-gray-50/30 dark:bg-white/5">
+                            {kiroCredits && (
+                                <div
+                                    className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out opacity-15 dark:opacity-20 ${getColorClass(kiroCredits.percentage)}`}
+                                    style={{ width: `${kiroCredits.percentage}%` }}
+                                />
+                            )}
+                            <div className="relative z-10 w-full flex items-center justify-between text-[10px] font-mono">
+                                <span className="text-gray-500 dark:text-gray-400 font-bold">Total Credits</span>
+                                <span className={cn("font-bold transition-colors",
+                                    getQuotaColor(kiroCredits?.percentage || 0) === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
+                                        getQuotaColor(kiroCredits?.percentage || 0) === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
+                                )}>
+                                    {(kiroCredits?.percentage || 0)}%
+                                </span>
+                            </div>
+                        </div>
+                        
+                        {/* Monthly Credits */}
+                        <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                            <div className="px-2 py-1 rounded-md bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-900/30">
+                                <div className="text-gray-500 dark:text-gray-400 font-medium">Monthly</div>
+                                <div className="font-bold text-blue-600 dark:text-blue-400">
+                                    {(kiroMonthlyLimit - kiroMonthlyUsed).toFixed(1)} / {kiroMonthlyLimit.toFixed(0)}
+                                </div>
+                            </div>
+                            
+                            {/* Free Trial Credits */}
+                            {kiroTrialStatus === 'ACTIVE' && kiroTrialLimit > 0 && (
+                                <div className="px-2 py-1 rounded-md bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100/50 dark:border-emerald-900/30">
+                                    <div className="text-gray-500 dark:text-gray-400 font-medium">Free Trial</div>
+                                    <div className="font-bold text-emerald-600 dark:text-emerald-400">
+                                        {(kiroTrialLimit - kiroTrialUsed).toFixed(1)} / {kiroTrialLimit.toFixed(0)}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {/* Reset Time */}
+                        {kiroCredits?.reset_time && (
+                            <div className="flex items-center justify-center gap-1 text-[9px] text-gray-400 dark:text-gray-500">
+                                <Clock className="w-2.5 h-2.5" />
+                                <span>Resets {formatTimeRemaining(kiroCredits.reset_time)}</span>
+                            </div>
+                        )}
+                    </div>
                 ) : (
+                    /* Gemini Models Display */
                     <>
                         <div className="grid grid-cols-2 gap-1.5">
                             {/* Gemini Pro */}
@@ -273,7 +338,7 @@ function AccountCard({ account, selected, onSelect, isCurrent, isRefreshing, isS
                     <button
                         className="p-1.5 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all"
                         onClick={(e) => { e.stopPropagation(); onViewDevice(); }}
-                        title="设备指纹"
+                        title={t('accounts.device_fingerprint')}
                     >
                         <Fingerprint className="w-3.5 h-3.5" />
                     </button>

@@ -179,6 +179,8 @@ pub fn run() {
             commands::security::get_ip_token_stats,
             // Cache 命令
             commands::clear_cache,
+            // Account 命令
+            commands::update_account_individual_proxy,
             // Autostart 命令
             commands::autostart::toggle_auto_launch,
             commands::autostart::is_auto_launch_enabled,

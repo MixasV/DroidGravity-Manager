@@ -232,23 +232,35 @@ pub async fn exchange_code(
 }
 
 
-/// Get user information
+/// Get user information using Web Portal API
 pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
     let client = crate::utils::http::create_client(15);
     
-    crate::modules::logger::log_info("Fetching Kiro user info...");
+    crate::modules::logger::log_info("Fetching Kiro user info via Web Portal API (CBOR)...");
     
-    // Kiro API endpoint for GetUserInfo
-    let request_body = GetUserInfoRequest {
-        origin: "KIRO_IDE".to_string(),
-    };
+    // Use Web Portal API endpoint with CBOR format
+    // POST https://app.kiro.dev/service/KiroWebPortalService/operation/GetUserInfo
+    // Content-Type: application/cbor
+    // Body: CBOR encoded {"origin": "KIRO_IDE"}
+    
+    let request_body = serde_json::json!({
+        "origin": "KIRO_IDE"
+    });
+    
+    // Encode to CBOR
+    let mut cbor_body = Vec::new();
+    ciborium::ser::into_writer(&request_body, &mut cbor_body)
+        .map_err(|e| format!("Failed to encode CBOR: {}", e))?;
     
     let response = client
-        .post(format!("{}/service/KiroWebPortalService/GetUserInfo", KIRO_API_URL))
+        .post(format!("{}/service/KiroWebPortalService/operation/GetUserInfo", KIRO_API_URL))
         .header("Authorization", format!("Bearer {}", access_token))
-        .header("Content-Type", "application/json")
+        .header("Content-Type", "application/cbor")
+        .header("Accept", "application/cbor")
+        .header("smithy-protocol", "rpc-v2-cbor")
         .header("User-Agent", "DroidGravity-Manager/2.0.2")
-        .json(&request_body)
+        .header("Cookie", format!("AccessToken={}; Idp=Google", access_token))  // ВАЖНО! Web Portal API требует Cookie с Idp
+        .body(cbor_body)
         .send()
         .await
         .map_err(|e| {
@@ -258,61 +270,56 @@ pub async fn get_user_info(access_token: &str) -> Result<KiroUserInfo, String> {
         })?;
     
     let status = response.status();
-    let response_text = response.text().await.unwrap_or_default();
+    let response_bytes = response.bytes().await.unwrap_or_default();
     
     crate::modules::logger::log_info(&format!(
-        "GetUserInfo response: status={}, body={}",
+        "GetUserInfo response: status={}, bytes={}",
         status,
-        &response_text[..response_text.len().min(500)]
+        response_bytes.len()
     ));
     
     if !status.is_success() {
-        let error_msg = format!("GetUserInfo failed with status {}: {}", status, &response_text[..response_text.len().min(200)]);
+        let error_msg = format!("GetUserInfo failed with status {}", status);
         crate::modules::logger::log_error(&error_msg);
         return Err(error_msg);
     }
     
-    // Try to parse as JSON first
-    if let Ok(user_info) = serde_json::from_str::<KiroUserInfo>(&response_text) {
-        crate::modules::logger::log_info(&format!(
-            "✅ Kiro user info parsed successfully: {} ({})",
-            user_info.email,
-            user_info.status
-        ));
-        return Ok(user_info);
-    }
+    // Decode CBOR response
+    let json_value: serde_json::Value = ciborium::de::from_reader(&response_bytes[..])
+        .map_err(|e| {
+            let error_msg = format!("Failed to decode CBOR response: {}", e);
+            crate::modules::logger::log_error(&error_msg);
+            error_msg
+        })?;
     
-    // If JSON parsing fails, try to extract email from any format
-    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
-        crate::modules::logger::log_info(&format!("Trying to extract email from JSON: {:?}", json_value));
-        
-        if let Some(email) = json_value.get("email").and_then(|v| v.as_str()) {
-            let user_info = KiroUserInfo {
-                email: email.to_string(),
-                user_id: json_value.get("id")
-                    .or_else(|| json_value.get("userId"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown")
-                    .to_string(),
-                idp: json_value.get("idp")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Google")
-                    .to_string(),
-                status: json_value.get("status")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Active")
-                    .to_string(),
-                feature_flags: std::collections::HashMap::new(),
-            };
-            crate::modules::logger::log_info(&format!("✅ Extracted user info: {}", user_info.email));
-            return Ok(user_info);
-        }
-    }
+    crate::modules::logger::log_info(&format!("Parsing user info from CBOR: {:?}", json_value));
     
-    // If all parsing fails, return error
-    let error_msg = format!("Failed to parse user info from response: {}", &response_text[..response_text.len().min(200)]);
-    crate::modules::logger::log_error(&error_msg);
-    Err(error_msg)
+    // Extract email from various possible locations
+    let email = json_value.get("email")
+        .or_else(|| json_value.get("userInfo").and_then(|v| v.get("email")))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            let error_msg = "No email found in response".to_string();
+            crate::modules::logger::log_error(&error_msg);
+            error_msg
+        })?;
+    
+    let user_id = json_value.get("userId")
+        .or_else(|| json_value.get("userInfo").and_then(|v| v.get("userId")))
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    
+    let user_info = KiroUserInfo {
+        email: email.to_string(),
+        user_id,
+        idp: "Google".to_string(),
+        status: "Active".to_string(),
+        feature_flags: std::collections::HashMap::new(),
+    };
+    
+    crate::modules::logger::log_info(&format!("✅ Kiro user info: {}", user_info.email));
+    Ok(user_info)
 }
 
 /// Manual token input for testing (temporary solution)
@@ -323,38 +330,12 @@ pub async fn manual_token_input(
 ) -> Result<KiroTokenResponse, String> {
     crate::modules::logger::log_info("Using manually provided Kiro tokens");
     
-    // Clean up tokens - remove parts after colon if present (cookie format)
-    let clean_access_token = if access_token.contains(':') {
-        let parts: Vec<&str> = access_token.split(':').collect();
-        crate::modules::logger::log_info(&format!(
-            "Access token contains colon, using first part (length: {} -> {})",
-            access_token.len(),
-            parts[0].len()
-        ));
-        parts[0].to_string()
-    } else {
-        access_token.to_string()
-    };
-    
-    let clean_refresh_token = if let Some(rt) = refresh_token {
-        if rt.contains(':') {
-            let parts: Vec<&str> = rt.split(':').collect();
-            crate::modules::logger::log_info(&format!(
-                "Refresh token contains colon, using first part (length: {} -> {})",
-                rt.len(),
-                parts[0].len()
-            ));
-            parts[0].to_string()
-        } else {
-            rt.to_string()
-        }
-    } else {
-        "".to_string()
-    };
+    // DO NOT clean tokens - Kiro uses format "token:signature" and both parts are needed!
+    // From captured traffic: Bearer aoaAAAAAGmXdh0VsKaWo3YbJXAryPQo....:MGUCMA...
     
     let tokens = KiroTokenResponse {
-        access_token: clean_access_token.clone(),
-        refresh_token: clean_refresh_token.clone(),
+        access_token: access_token.to_string(),
+        refresh_token: refresh_token.unwrap_or("").to_string(),
         expires_in: expires_in.unwrap_or(3600),
         profile_arn: "arn:aws:codewhisperer:us-east-1:699475941385:profile/MANUAL".to_string(),
     };
@@ -369,59 +350,78 @@ pub async fn manual_token_input(
     Ok(tokens)
 }
 
-/// Get Kiro user balance/credits information
-pub async fn get_user_balance(access_token: &str) -> Result<serde_json::Value, String> {
+/// Get Kiro user usage and limits via Web Portal API
+pub async fn get_user_usage_and_limits(access_token: &str) -> Result<serde_json::Value, String> {
     let client = crate::utils::http::create_client(15);
     
-    crate::modules::logger::log_info("Fetching Kiro user balance...");
+    crate::modules::logger::log_info("Fetching Kiro usage and limits via Web Portal API (CBOR)...");
     
-    // Try different possible balance endpoints
-    let endpoints = [
-        "/api/user/balance",
-        "/api/user/credits", 
-        "/api/user/usage",
-        "/service/KiroWebPortalService/GetUserInfo"
-    ];
+    // Use Web Portal API endpoint with CBOR format
+    // POST https://app.kiro.dev/service/KiroWebPortalService/operation/GetUserUsageAndLimits
+    // Content-Type: application/cbor
+    // Body: CBOR encoded {"origin": "KIRO_IDE", "isEmailRequired": false}
     
-    for endpoint in &endpoints {
-        let response = client
-            .get(format!("{}{}", KIRO_API_URL, endpoint))
-            .header("Authorization", format!("Bearer {}", access_token))
-            .header("User-Agent", "DroidGravity-Manager/2.0.1")
-            .send()
-            .await;
-            
-        match response {
-            Ok(resp) => {
-                let status = resp.status();
-                let response_text = resp.text().await.unwrap_or_default();
-                
-                if status.is_success() {
-                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&response_text) {
-                        crate::modules::logger::log_info(&format!(
-                            "Kiro balance from {}: {}",
-                            endpoint,
-                            &response_text[..response_text.len().min(200)]
-                        ));
-                        return Ok(json_value);
-                    }
-                }
-            }
-            Err(_) => continue,
-        }
+    let request_body = serde_json::json!({
+        "origin": "KIRO_IDE",
+        "isEmailRequired": false
+    });
+    
+    // Encode to CBOR
+    let mut cbor_body = Vec::new();
+    ciborium::ser::into_writer(&request_body, &mut cbor_body)
+        .map_err(|e| format!("Failed to encode CBOR: {}", e))?;
+    
+    let response = client
+        .post(format!("{}/service/KiroWebPortalService/operation/GetUserUsageAndLimits", KIRO_API_URL))
+        .header("Authorization", format!("Bearer {}", access_token))
+        .header("Content-Type", "application/cbor")
+        .header("Accept", "application/cbor")
+        .header("smithy-protocol", "rpc-v2-cbor")
+        .header("User-Agent", "DroidGravity-Manager/2.0.2")
+        .header("Cookie", format!("AccessToken={}", access_token))  // ВАЖНО! Web Portal API требует Cookie
+        .body(cbor_body)
+        .send()
+        .await
+        .map_err(|e| {
+            let error_msg = format!("GetUserUsageAndLimits request failed: {}", e);
+            crate::modules::logger::log_error(&error_msg);
+            error_msg
+        })?;
+    
+    let status = response.status();
+    let response_bytes = response.bytes().await.unwrap_or_default();
+    
+    crate::modules::logger::log_info(&format!(
+        "GetUserUsageAndLimits response: status={}, bytes={}",
+        status,
+        response_bytes.len()
+    ));
+    
+    if !status.is_success() {
+        let error_msg = format!(
+            "GetUserUsageAndLimits failed with status {}",
+            status
+        );
+        crate::modules::logger::log_error(&error_msg);
+        return Err(error_msg);
     }
     
-    // If all endpoints fail, return a default structure
-    crate::modules::logger::log_warn("Could not fetch Kiro balance from any endpoint, using default");
+    // Decode CBOR response
+    let json_value: serde_json::Value = ciborium::de::from_reader(&response_bytes[..])
+        .map_err(|e| {
+            let error_msg = format!("Failed to decode CBOR response: {}", e);
+            crate::modules::logger::log_error(&error_msg);
+            error_msg
+        })?;
     
-    Ok(serde_json::json!({
-        "subscription_tier": "Kiro",
-        "current_usage": 0,
-        "usage_limit": 100000,
-        "remaining": 100000,
-        "usage_percentage": 0.0,
-        "next_reset_at": chrono::Utc::now().timestamp() + 86400
-    }))
+    crate::modules::logger::log_info("✅ Successfully parsed usage and limits from CBOR");
+    Ok(json_value)
+}
+
+/// Get Kiro user balance/credits information (deprecated - use get_user_usage_and_limits)
+pub async fn get_user_balance(access_token: &str) -> Result<serde_json::Value, String> {
+    // Redirect to new function
+    get_user_usage_and_limits(access_token).await
 }
 
 /// Refresh Kiro access token using AWS Cognito
@@ -434,23 +434,17 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenRespon
     let cognito_domain = "https://kiro-prod-us-east-1.auth.us-east-1.amazoncognito.com";
     let client_id = "59bd15eh40ee7pc20h0bkcu7id";
     
-    // Clean token (remove any colons if present)
-    let clean_refresh_token = if refresh_token.contains(':') {
-        refresh_token.split(':').next().unwrap_or(refresh_token)
-    } else {
-        refresh_token
-    };
-    
+    // DO NOT clean token - Kiro uses format "token:signature"
     crate::modules::logger::log_info(&format!(
         "Using refresh token: {}... (len: {})",
-        &clean_refresh_token[..clean_refresh_token.len().min(20)],
-        clean_refresh_token.len()
+        &refresh_token[..refresh_token.len().min(20)],
+        refresh_token.len()
     ));
     
     // Prepare form data for token refresh
     let form_data = [
         ("grant_type", "refresh_token"),
-        ("refresh_token", clean_refresh_token),
+        ("refresh_token", refresh_token),
         ("client_id", client_id),
     ];
     
@@ -514,7 +508,7 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenRespon
         .get("refresh_token")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| clean_refresh_token.to_string());
+        .unwrap_or_else(|| refresh_token.to_string());
     
     crate::modules::logger::log_info(&format!(
         "✅ Token refreshed successfully: access_token={}..., expires_in={}s",

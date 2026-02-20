@@ -1030,9 +1030,9 @@ pub async fn manual_kiro_token_input(
             e
         })?;
     
-    crate::modules::logger::log_info("=== FETCHING USER INFO FROM KIRO API ===");
+    crate::modules::logger::log_info("=== FETCHING USER INFO FROM KIRO WEB PORTAL API ===");
     
-    // Try to get real user info from Kiro API
+    // Try to get real user info from Kiro Web Portal API (with Cookie header)
     let (user_email, user_id) = match crate::modules::oauth_kiro::get_user_info(&tokens.access_token).await {
         Ok(user_info) => {
             crate::modules::logger::log_info(&format!(

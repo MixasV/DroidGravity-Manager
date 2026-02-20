@@ -1,8 +1,11 @@
-import { X, Clock, AlertCircle } from 'lucide-react';
+import { X, Clock, AlertCircle, Globe } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { Account, ModelQuota } from '../../types/account';
 import { formatDate } from '../../utils/format';
 import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { showToast } from '../common/ToastContainer';
 
 interface AccountDetailsDialogProps {
     account: Account | null;
@@ -11,7 +14,25 @@ interface AccountDetailsDialogProps {
 
 export default function AccountDetailsDialog({ account, onClose }: AccountDetailsDialogProps) {
     const { t } = useTranslation();
+    const [proxyUrl, setProxyUrl] = useState(account?.individual_proxy || '');
+    const [saving, setSaving] = useState(false);
+    
     if (!account) return null;
+    
+    const handleSaveProxy = async () => {
+        setSaving(true);
+        try {
+            await invoke('update_account_individual_proxy', {
+                accountId: account.id,
+                proxyUrl: proxyUrl || null
+            });
+            showToast(proxyUrl ? t('accounts.individual_proxy_saved') : t('accounts.individual_proxy_cleared'), 'success');
+        } catch (error) {
+            showToast(`Failed to save proxy: ${error}`, 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
 
     return createPortal(
         <div className="modal modal-open z-[100]">
@@ -36,7 +57,50 @@ export default function AccountDetailsDialog({ account, onClose }: AccountDetail
                 </div>
 
                 {/* Content */}
-                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto">
+                <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                    {/* Individual Proxy Section */}
+                    <div className="p-4 rounded-xl border border-gray-100 dark:border-base-200 bg-gray-50/50 dark:bg-base-200/50">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Globe className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                            <h4 className="text-sm font-semibold text-gray-900 dark:text-base-content">
+                                {t('accounts.individual_proxy')}
+                            </h4>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                            {t('accounts.individual_proxy_tooltip')}
+                        </p>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                className="input input-sm input-bordered flex-1 text-xs font-mono"
+                                placeholder={t('accounts.individual_proxy_placeholder')}
+                                value={proxyUrl}
+                                onChange={(e) => setProxyUrl(e.target.value)}
+                            />
+                            <button
+                                className="btn btn-sm btn-primary"
+                                onClick={handleSaveProxy}
+                                disabled={saving}
+                            >
+                                {saving ? t('common.loading') : t('accounts.individual_proxy_save')}
+                            </button>
+                            {proxyUrl && (
+                                <button
+                                    className="btn btn-sm btn-ghost"
+                                    onClick={() => {
+                                        setProxyUrl('');
+                                        handleSaveProxy();
+                                    }}
+                                    disabled={saving}
+                                >
+                                    {t('accounts.individual_proxy_clear')}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* Models Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {account.quota?.models?.map((model: ModelQuota) => (
                         <div key={model.name} className="p-4 rounded-xl border border-gray-100 dark:border-base-200 bg-white dark:bg-base-100 hover:border-blue-100 dark:hover:border-blue-900 hover:shadow-sm transition-all group">
                             <div className="flex justify-between items-start mb-3">
@@ -75,6 +139,7 @@ export default function AccountDetailsDialog({ account, onClose }: AccountDetail
                                 <span>{t('accounts.no_data')}</span>
                             </div>
                         )}
+                    </div>
                 </div>
             </div>
             <div className="modal-backdrop bg-black/40 backdrop-blur-sm" onClick={onClose}></div>

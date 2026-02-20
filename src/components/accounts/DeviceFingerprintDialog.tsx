@@ -1,9 +1,11 @@
 import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
-import { Wand2, RotateCcw, FolderOpen, Trash2, X } from 'lucide-react';
+import { Wand2, RotateCcw, FolderOpen, Trash2, X, Globe } from 'lucide-react';
 import { Account, DeviceProfile, DeviceProfileVersion } from '../../types/account';
 import * as accountService from '../../services/accountService';
 import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
+import { showToast } from '../common/ToastContainer';
 
 interface DeviceFingerprintDialogProps {
     account: Account | null;
@@ -18,6 +20,8 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
     const [actionMessage, setActionMessage] = useState<string | null>(null);
     const [confirmProfile, setConfirmProfile] = useState<DeviceProfile | null>(null);
     const [confirmType, setConfirmType] = useState<'generate' | 'restoreOriginal' | null>(null);
+    const [proxyUrl, setProxyUrl] = useState(account?.individual_proxy || '');
+    const [savingProxy, setSavingProxy] = useState(false);
 
     const fetchDevice = async (target?: Account | null) => {
         if (!target) {
@@ -29,7 +33,7 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
             const res = await accountService.getDeviceProfiles(target.id);
             setDeviceProfiles(res);
         } catch (e: any) {
-            setActionMessage(typeof e === 'string' ? e : '加载设备信息失败');
+            setActionMessage(typeof e === 'string' ? e : t('accounts.device_fingerprint_load_failed'));
         } finally {
             setLoadingDevice(false);
         }
@@ -46,7 +50,7 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
             setConfirmProfile(profile);
             setConfirmType('generate');
         } catch (e: any) {
-            setActionMessage(typeof e === 'string' ? e : '生成失败');
+            setActionMessage(typeof e === 'string' ? e : t('accounts.device_fingerprint_generate_failed'));
         } finally {
             setActionLoading(null);
         }
@@ -57,12 +61,12 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
         setActionLoading('generate');
         try {
             await accountService.bindDeviceProfileWithProfile(account.id, confirmProfile);
-            setActionMessage('已生成并绑定');
+            setActionMessage(t('accounts.device_fingerprint_generated'));
             setConfirmProfile(null);
             setConfirmType(null);
-            await fetchDevice(account); // 刷新历史
+            await fetchDevice(account);
         } catch (e: any) {
-            setActionMessage(typeof e === 'string' ? e : '绑定失败');
+            setActionMessage(typeof e === 'string' ? e : t('accounts.device_fingerprint_bind_failed'));
         } finally {
             setActionLoading(null);
         }
@@ -70,7 +74,7 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
 
     const handleRestoreOriginalConfirm = () => {
         if (!deviceProfiles?.baseline) {
-            setActionMessage('未找到原始指纹');
+            setActionMessage(t('accounts.device_fingerprint_not_found'));
             return;
         }
         setConfirmProfile(deviceProfiles.baseline);
@@ -87,7 +91,7 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
             setConfirmType(null);
             await fetchDevice(account);
         } catch (e: any) {
-            setActionMessage(typeof e === 'string' ? e : '恢复失败');
+            setActionMessage(typeof e === 'string' ? e : t('accounts.device_fingerprint_restore_failed'));
         } finally {
             setActionLoading(null);
         }
@@ -98,10 +102,10 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
         setActionLoading(`restore-${versionId}`);
         try {
             await accountService.restoreDeviceVersion(account.id, versionId);
-            setActionMessage('已恢复指定指纹');
+            setActionMessage(t('accounts.device_fingerprint_restored'));
             await fetchDevice(account);
         } catch (e: any) {
-            setActionMessage(typeof e === 'string' ? e : '恢复失败');
+            setActionMessage(typeof e === 'string' ? e : t('accounts.device_fingerprint_restore_failed'));
         } finally {
             setActionLoading(null);
         }
@@ -112,10 +116,10 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
         setActionLoading(`delete-${versionId}`);
         try {
             await accountService.deleteDeviceVersion(account.id, versionId);
-            setActionMessage('已删除该历史指纹');
+            setActionMessage(t('accounts.device_fingerprint_deleted'));
             await fetchDevice(account);
         } catch (e: any) {
-            setActionMessage(typeof e === 'string' ? e : '删除失败');
+            setActionMessage(typeof e === 'string' ? e : t('accounts.device_fingerprint_delete_failed'));
         } finally {
             setActionLoading(null);
         }
@@ -125,16 +129,32 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
         setActionLoading('open-folder');
         try {
             await accountService.openDeviceFolder();
-            setActionMessage('已打开设备存储目录');
+            setActionMessage(t('accounts.device_fingerprint_folder_opened'));
         } catch (e: any) {
-            setActionMessage(typeof e === 'string' ? e : '无法打开目录');
+            setActionMessage(typeof e === 'string' ? e : t('accounts.device_fingerprint_folder_open_failed'));
         } finally {
             setActionLoading(null);
         }
     };
 
+    const handleSaveProxy = async () => {
+        if (!account) return;
+        setSavingProxy(true);
+        try {
+            await invoke('update_account_individual_proxy', {
+                accountId: account.id,
+                proxyUrl: proxyUrl || null
+            });
+            showToast(proxyUrl ? t('accounts.individual_proxy_saved') : t('accounts.individual_proxy_cleared'), 'success');
+        } catch (error) {
+            showToast(`Failed to save proxy: ${error}`, 'error');
+        } finally {
+            setSavingProxy(false);
+        }
+    };
+
     const renderProfile = (profile?: DeviceProfile) => {
-        if (!profile) return <span className="text-xs text-gray-400">{t('common.empty') || '空'}</span>;
+        if (!profile) return <span className="text-xs text-gray-400">{t('common.empty')}</span>;
         return (
             <div className="grid grid-cols-1 gap-2 text-xs font-mono text-gray-600 dark:text-gray-300">
                 <div><span className="font-semibold">machineId:</span> {profile.machine_id}</div>
@@ -153,7 +173,7 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
             <div className="modal-box relative max-w-3xl bg-white dark:bg-base-100 shadow-2xl rounded-2xl p-0 overflow-hidden">
                 <div className="px-6 py-5 border-b border-gray-100 dark:border-base-200 bg-gray-50/50 dark:bg-base-200/50 flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <h3 className="font-bold text-lg text-gray-900 dark:text-base-content">设备指纹</h3>
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-base-content">{t('accounts.device_fingerprint_title')}</h3>
                         <div className="px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-base-200 border border-gray-200 dark:border-base-300 text-xs font-mono text-gray-500 dark:text-gray-400">
                             {account.email}
                         </div>
@@ -168,47 +188,87 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
 
                 <div className="p-6 space-y-3 max-h-[70vh] overflow-y-auto">
                     <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">设备指纹操作</div>
+                        <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">{t('accounts.device_fingerprint_operations')}</div>
                         <div className="flex gap-2 flex-wrap">
                             <button className="btn btn-xs btn-outline" disabled={loadingDevice || actionLoading === 'preview'} onClick={handleGeneratePreview}>
-                                <Wand2 size={14} className="mr-1" />生成并绑定
+                                <Wand2 size={14} className="mr-1" />{t('accounts.device_fingerprint_generate')}
                             </button>
                             <button className="btn btn-xs btn-outline btn-error" disabled={loadingDevice || actionLoading === 'restore'} onClick={handleRestoreOriginalConfirm}>
-                                <RotateCcw size={14} className="mr-1" />恢复原始
+                                <RotateCcw size={14} className="mr-1" />{t('accounts.device_fingerprint_restore')}
                             </button>
                             <button className="btn btn-xs btn-outline" disabled={actionLoading === 'open-folder'} onClick={handleOpenFolder}>
-                                <FolderOpen size={14} className="mr-1" />打开存储目录
+                                <FolderOpen size={14} className="mr-1" />{t('accounts.device_fingerprint_open_folder')}
                             </button>
                         </div>
                     </div>
                     {actionMessage && <div className="text-xs text-blue-600 dark:text-blue-300">{actionMessage}</div>}
+                    
+                    {/* Individual Proxy Section */}
+                    <div className="p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/30 dark:bg-indigo-900/10">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Globe className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                            <h4 className="text-sm font-semibold text-gray-900 dark:text-base-content">
+                                {t('accounts.individual_proxy')}
+                            </h4>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                            {t('accounts.individual_proxy_tooltip')}
+                        </p>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                className="input input-sm input-bordered flex-1 text-xs font-mono"
+                                placeholder={t('accounts.individual_proxy_placeholder')}
+                                value={proxyUrl}
+                                onChange={(e) => setProxyUrl(e.target.value)}
+                            />
+                            <button
+                                className="btn btn-sm btn-primary"
+                                onClick={handleSaveProxy}
+                                disabled={savingProxy}
+                            >
+                                {savingProxy ? t('common.loading') : t('accounts.individual_proxy_save')}
+                            </button>
+                            {proxyUrl && (
+                                <button
+                                    className="btn btn-sm btn-ghost"
+                                    onClick={() => {
+                                        setProxyUrl('');
+                                    }}
+                                    disabled={savingProxy}
+                                >
+                                    {t('accounts.individual_proxy_clear')}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="p-4 rounded-xl border border-gray-100 dark:border-base-200 bg-white dark:bg-base-100 shadow-sm">
                             <div className="flex items-center justify-between mb-1">
-                                <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">当前存储</div>
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300 border border-blue-100 dark:border-blue-400/40">已生效</span>
+                                <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">{t('accounts.device_fingerprint_current_storage')}</div>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300 border border-blue-100 dark:border-blue-400/40">{t('accounts.device_fingerprint_active')}</span>
                             </div>
-                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-2">读取自 storage.json（切换账号时应用绑定后更新）</p>
-                            {loadingDevice ? <div className="text-xs text-gray-400">加载中...</div> : renderProfile(deviceProfiles?.current_storage)}
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-2">{t('accounts.device_fingerprint_current_storage_desc')}</p>
+                            {loadingDevice ? <div className="text-xs text-gray-400">{t('accounts.device_fingerprint_loading')}</div> : renderProfile(deviceProfiles?.current_storage)}
                         </div>
                         <div className="p-4 rounded-xl border border-gray-100 dark:border-base-200 bg-white dark:bg-base-100 shadow-sm">
                             <div className="flex items-center justify-between mb-1">
-                                <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">账号绑定</div>
-                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300 border border-amber-100 dark:border-amber-400/40">待应用</span>
+                                <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">{t('accounts.device_fingerprint_account_binding')}</div>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300 border border-amber-100 dark:border-amber-400/40">{t('accounts.device_fingerprint_pending')}</span>
                             </div>
-                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-2">生成/恢复后保存为绑定，切换账号时写入 storage.json</p>
-                            {/* 绑定指纹 = 当前历史中 is_current 的那条 */}
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-2">{t('accounts.device_fingerprint_account_binding_desc')}</p>
                             {loadingDevice ? (
-                                <div className="text-xs text-gray-400">加载中...</div>
+                                <div className="text-xs text-gray-400">{t('accounts.device_fingerprint_loading')}</div>
                             ) : (
                                 renderProfile(deviceProfiles?.history?.find(h => h.is_current)?.profile)
                             )}
                         </div>
                     </div>
                     <div className="p-3 rounded-xl border border-gray-100 dark:border-base-200 bg-white dark:bg-base-100">
-                        <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">历史指纹（可选恢复/删除）</div>
+                        <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">{t('accounts.device_fingerprint_history_title')}</div>
                         {loadingDevice ? (
-                            <div className="text-xs text-gray-400">加载中...</div>
+                            <div className="text-xs text-gray-400">{t('accounts.device_fingerprint_loading')}</div>
                         ) : (
                             <div className="space-y-2">
                                 {deviceProfiles?.history && deviceProfiles.history.map(v => (
@@ -225,7 +285,7 @@ export default function DeviceFingerprintDialog({ account, onClose }: DeviceFing
                                     />
                                 ))}
                                 {(!deviceProfiles?.history || deviceProfiles.history.length === 0) && !deviceProfiles?.baseline && (
-                                    <div className="text-xs text-gray-400">暂无历史</div>
+                                    <div className="text-xs text-gray-400">{t('accounts.device_fingerprint_history_empty')}</div>
                                 )}
                             </div>
                         )}
@@ -263,11 +323,12 @@ interface HistoryRowProps {
 }
 
 function HistoryRow({ id, label, createdAt, profile, onRestore, onDelete, isCurrent, loadingKey }: HistoryRowProps) {
+    const { t } = useTranslation();
     const key = id || label;
     return (
         <div className="flex items-start justify-between p-2 rounded-lg border border-gray-100 dark:border-base-200 hover:border-indigo-200 dark:hover:border-indigo-500/40 transition-colors">
             <div className="text-[11px] text-gray-600 dark:text-gray-300 flex-1">
-                <div className="font-semibold">{label}{isCurrent && <span className="ml-2 text-[10px] text-blue-500">当前</span>}</div>
+                <div className="font-semibold">{label}{isCurrent && <span className="ml-2 text-[10px] text-blue-500">{t('accounts.device_fingerprint_history_current')}</span>}</div>
                 {createdAt > 0 && <div className="text-[10px] text-gray-400">{new Date(createdAt * 1000).toLocaleString()}</div>}
                 <div className="mt-1 text-[10px] font-mono text-gray-500">
                     <div>machineId: {profile.machine_id}</div>
@@ -277,9 +338,9 @@ function HistoryRow({ id, label, createdAt, profile, onRestore, onDelete, isCurr
                 </div>
             </div>
             <div className="flex gap-2 ml-2">
-                <button className="btn btn-xs btn-outline" disabled={loadingKey === `restore-${key}` || isCurrent} onClick={onRestore} title="恢复此版本">恢复</button>
+                <button className="btn btn-xs btn-outline" disabled={loadingKey === `restore-${key}` || isCurrent} onClick={onRestore} title={t('accounts.device_fingerprint_history_restore_title')}>{t('accounts.device_fingerprint_history_restore')}</button>
                 {!isCurrent && onDelete && (
-                    <button className="btn btn-xs btn-outline btn-error" disabled={loadingKey === `delete-${key}`} onClick={onDelete} title="删除此版本">
+                    <button className="btn btn-xs btn-outline btn-error" disabled={loadingKey === `delete-${key}`} onClick={onDelete} title={t('accounts.device_fingerprint_history_delete_title')}>
                         <Trash2 size={14} />
                     </button>
                 )}
@@ -288,13 +349,14 @@ function HistoryRow({ id, label, createdAt, profile, onRestore, onDelete, isCurr
     );
 }
 
-// 确认弹框
+// Confirm Dialog
 function ConfirmDialog({ profile, type, onConfirm, onCancel, loading }: { profile: DeviceProfile; type: 'generate' | 'restoreOriginal'; onConfirm: () => void; onCancel: () => void; loading?: boolean }) {
-    const title = type === 'generate' ? '确认生成并绑定？' : '确认恢复原始指纹？';
+    const { t } = useTranslation();
+    const title = type === 'generate' ? t('accounts.device_fingerprint_generate_confirm') : t('accounts.device_fingerprint_restore_confirm');
     const desc =
         type === 'generate'
-            ? '将生成一套新的设备指纹并设置为当前指纹。确认继续？'
-            : '将恢复为原始指纹并覆盖当前指纹。确认继续？';
+            ? t('accounts.device_fingerprint_generate_confirm')
+            : t('accounts.device_fingerprint_restore_confirm');
     return createPortal(
         <div className="modal modal-open z-[140]">
             <div className="modal-box max-w-sm bg-white dark:bg-base-100 rounded-2xl shadow-2xl p-6 text-center">
@@ -314,8 +376,8 @@ function ConfirmDialog({ profile, type, onConfirm, onCancel, loading }: { profil
                     <div><span className="font-semibold">sqmId:</span> {profile.sqm_id}</div>
                 </div>
                 <div className="mt-5 flex gap-3 justify-center">
-                    <button className="btn btn-sm min-w-[100px]" onClick={onCancel} disabled={!!loading}>取消</button>
-                    <button className="btn btn-sm btn-primary min-w-[100px]" onClick={onConfirm} disabled={!!loading}>{loading ? '处理中...' : '确认'}</button>
+                    <button className="btn btn-sm min-w-[100px]" onClick={onCancel} disabled={!!loading}>{t('accounts.device_fingerprint_confirm_cancel')}</button>
+                    <button className="btn btn-sm btn-primary min-w-[100px]" onClick={onConfirm} disabled={!!loading}>{loading ? t('accounts.device_fingerprint_confirm_processing') : t('accounts.device_fingerprint_confirm_ok')}</button>
                 </div>
             </div>
             <div className="modal-backdrop bg-black/30" onClick={onCancel}></div>

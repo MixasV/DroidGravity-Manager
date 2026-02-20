@@ -52,6 +52,15 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
         }
     }, [isOpen, activeTab]);
 
+    // Change default tab when provider changes
+    useEffect(() => {
+        if (provider === 'kiro') {
+            setActiveTab('manual');
+        } else {
+            setActiveTab('oauth');
+        }
+    }, [provider]);
+
     // Listen for OAuth URL
     useEffect(() => {
         let unlisten: (() => void) | undefined;
@@ -472,25 +481,29 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                         </div>
 
                         {/* Tab 导航 -胶囊风格 */}
-                        <div className={`bg-gray-100 dark:bg-base-200 p-1 rounded-xl mb-6 grid gap-1 ${provider === 'kiro' ? 'grid-cols-4' : 'grid-cols-3'}`}>
-                            <button
-                                className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'oauth'
-                                    ? 'bg-white dark:bg-base-100 shadow-sm text-blue-600 dark:text-blue-400'
-                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-base-300'
-                                    } `}
-                                onClick={() => setActiveTab('oauth')}
-                            >
-                                {t('accounts.add.tabs.oauth')}
-                            </button>
-                            <button
-                                className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'token'
-                                    ? 'bg-white dark:bg-base-100 shadow-sm text-blue-600 dark:text-blue-400'
-                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-base-300'
-                                    } `}
-                                onClick={() => setActiveTab('token')}
-                            >
-                                {t('accounts.add.tabs.token')}
-                            </button>
+                        <div className={`bg-gray-100 dark:bg-base-200 p-1 rounded-xl mb-6 grid gap-1 ${provider === 'kiro' ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                            {provider === 'gemini' && (
+                                <>
+                                    <button
+                                        className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'oauth'
+                                            ? 'bg-white dark:bg-base-100 shadow-sm text-blue-600 dark:text-blue-400'
+                                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-base-300'
+                                            } `}
+                                        onClick={() => setActiveTab('oauth')}
+                                    >
+                                        {t('accounts.add.tabs.oauth')}
+                                    </button>
+                                    <button
+                                        className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'token'
+                                            ? 'bg-white dark:bg-base-100 shadow-sm text-blue-600 dark:text-blue-400'
+                                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-base-300'
+                                            } `}
+                                        onClick={() => setActiveTab('token')}
+                                    >
+                                        {t('accounts.add.tabs.token')}
+                                    </button>
+                                </>
+                            )}
                             {provider === 'kiro' && (
                                 <button
                                     className={`py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === 'manual'
@@ -499,7 +512,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                                         } `}
                                     onClick={() => setActiveTab('manual')}
                                 >
-                                    Manual Tokens
+                                    Manual
                                 </button>
                             )}
                             <button
@@ -616,10 +629,11 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                                             📋 Manual Token Input from Browser Cookies
                                         </h4>
                                         <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-                                            After successful OAuth authorization, extract tokens from browser cookies:
+                                            Extract tokens from browser cookies after authorization:
                                         </p>
                                         <ol className="text-xs text-yellow-600 dark:text-yellow-400 space-y-1 ml-4 list-decimal">
-                                            <li>Open DevTools (F12) → Application → Cookies → app.kiro.dev</li>
+                                            <li>Visit <a href="https://app.kiro.dev/" target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-800 dark:hover:text-yellow-200">https://app.kiro.dev/</a> and sign in with <strong>Google</strong> (only Google auth is currently supported)</li>
+                                            <li>After successful login, open DevTools (F12) → Application → Cookies → app.kiro.dev</li>
                                             <li>Find and copy <code className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">AccessToken</code> value</li>
                                             <li>Find and copy <code className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">RefreshToken</code> value</li>
                                             <li>Paste both tokens below and click Add Account</li>

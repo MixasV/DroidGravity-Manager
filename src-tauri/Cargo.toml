@@ -1,6 +1,6 @@
 [package]
 name = "droidgravity_manager"
-version = "2.0.2"
+version = "2.0.3"
 description = "Account manager and API proxy for Factory Droid with Google Gemini, Anthropic Claude, and Kiro support"
 authors = ["DroidGravity Contributors"]
 license = "CC-BY-NC-SA-4.0"
@@ -74,6 +74,7 @@ tokio-util = { version = "0.7", features = ["full"] }
 scopeguard = "1.2"
 open = "5.0"
 byteorder = "1.5"  # AWS Event Stream parsing
+ciborium = "0.2"   # CBOR encoding/decoding for Kiro Web Portal API
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"

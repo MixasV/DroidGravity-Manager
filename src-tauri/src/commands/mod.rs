@@ -751,3 +751,15 @@ pub async fn toggle_proxy_status(
 pub async fn clear_cache() -> Result<modules::cache::ClearResult, String> {
     modules::cache::clear_antigravity_cache(None)
 }
+
+/// 更新账号的个人代理设置
+#[tauri::command]
+pub async fn update_account_individual_proxy(
+    account_id: String,
+    proxy_url: Option<String>,
+) -> Result<(), String> {
+    let mut account = modules::load_account(&account_id)?;
+    account.individual_proxy = proxy_url;
+    modules::save_account(&account)?;
+    Ok(())
+}

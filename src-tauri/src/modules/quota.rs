@@ -126,7 +126,18 @@ pub async fn fetch_quota(access_token: &str, email: &str) -> crate::error::AppRe
 /// 查询账号配额逻辑
 pub async fn fetch_quota_inner(access_token: &str, email: &str) -> crate::error::AppResult<(QuotaData, Option<String>)> {
     use crate::error::AppError;
-    // crate::modules::logger::log_info(&format!("[{}] 开始外部查询配额...", email));
+    
+    // Detect provider by token format
+    // Kiro tokens start with "aoa" (access) or "aor" (refresh)
+    let is_kiro = access_token.starts_with("aoa") || access_token.starts_with("aor");
+    
+    if is_kiro {
+        crate::modules::logger::log_info(&format!("[{}] Detected Kiro provider, using Kiro API", email));
+        return fetch_kiro_quota(access_token, email).await;
+    }
+    
+    // Default: Gemini provider
+    crate::modules::logger::log_info(&format!("[{}] Using Gemini API", email));
     
     // 1. 获取 Project ID 和订阅类型
     let (project_id, subscription_tier) = fetch_project_id(access_token, email).await;
@@ -221,6 +232,155 @@ pub async fn fetch_quota_inner(access_token: &str, email: &str) -> crate::error:
     }
     
     Err(last_error.unwrap_or_else(|| AppError::Unknown("配额查询失败".to_string())))
+}
+
+/// Fetch Kiro quota using Web Portal API
+async fn fetch_kiro_quota(access_token: &str, email: &str) -> crate::error::AppResult<(QuotaData, Option<String>)> {
+    use crate::error::AppError;
+    
+    crate::modules::logger::log_info(&format!("[{}] Fetching Kiro quota via Web Portal API", email));
+    
+    // Call Kiro API
+    let usage_result = crate::modules::oauth_kiro::get_user_usage_and_limits(access_token).await;
+    
+    match usage_result {
+        Ok(json_value) => {
+            crate::modules::logger::log_info(&format!("[{}] Kiro API response received", email));
+            
+            let mut quota_data = QuotaData::new();
+            
+            // Parse Kiro response format
+            // Expected structure from captured traffic:
+            // {
+            //   "usageBreakdownList": [
+            //     {
+            //       "resourceType": "CREDIT",
+            //       "currentUsageWithPrecision": 21.72,
+            //       "usageLimitWithPrecision": 50.0,
+            //       "freeTrialInfo": {
+            //         "currentUsageWithPrecision": 21.72,
+            //         "usageLimitWithPrecision": 500.0,
+            //         "freeTrialStatus": "ACTIVE",
+            //         "freeTrialExpiry": 1774129297.746
+            //       },
+            //       "displayName": "Credit",
+            //       ...
+            //     }
+            //   ],
+            //   "subscriptionInfo": {
+            //     "subscriptionTitle": "KIRO FREE",
+            //     "type": "Q_DEVELOPER_STANDALONE_FREE"
+            //   },
+            //   "daysUntilReset": 0,
+            //   "nextDateReset": 1772323200.0
+            // }
+            
+            if let Some(usage_list) = json_value.get("usageBreakdownList").and_then(|v| v.as_array()) {
+                for item in usage_list {
+                    let resource_type = item.get("resourceType").and_then(|v| v.as_str()).unwrap_or("");
+                    
+                    if resource_type == "CREDIT" {
+                        // Regular credits (monthly limit)
+                        let current_usage = item.get("currentUsageWithPrecision").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let usage_limit = item.get("usageLimitWithPrecision").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        
+                        // Free trial credits
+                        let mut trial_current = 0.0;
+                        let mut trial_limit = 0.0;
+                        let mut trial_status = "INACTIVE".to_string();
+                        let mut trial_expiry: Option<i64> = None;
+                        
+                        if let Some(trial_info) = item.get("freeTrialInfo") {
+                            trial_current = trial_info.get("currentUsageWithPrecision").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            trial_limit = trial_info.get("usageLimitWithPrecision").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                            trial_status = trial_info.get("freeTrialStatus").and_then(|v| v.as_str()).unwrap_or("INACTIVE").to_string();
+                            trial_expiry = trial_info.get("freeTrialExpiry").and_then(|v| v.as_f64()).map(|f| f as i64);
+                        }
+                        
+                        // Calculate total available and used
+                        let total_limit = usage_limit + trial_limit;
+                        let total_used = current_usage + trial_current;
+                        let total_remaining = total_limit - total_used;
+                        
+                        let percentage = if total_limit > 0.0 {
+                            ((total_remaining / total_limit) * 100.0) as i32
+                        } else {
+                            0
+                        };
+                        
+                        // Store as "kiro-credits" model with detailed info
+                        let reset_time = if let Some(expiry) = trial_expiry {
+                            expiry.to_string()
+                        } else {
+                            json_value.get("nextDateReset")
+                                .and_then(|v| v.as_f64())
+                                .map(|f| (f as i64).to_string())
+                                .unwrap_or_default()
+                        };
+                        
+                        quota_data.add_model(
+                            "kiro-credits".to_string(),
+                            percentage,
+                            reset_time
+                        );
+                        
+                        // Store Kiro-specific metadata in quota_data
+                        // We'll use the models HashMap to store additional info
+                        quota_data.add_model(
+                            "kiro-monthly-limit".to_string(),
+                            ((usage_limit - current_usage) / usage_limit * 100.0) as i32,
+                            format!("{:.2}", usage_limit)
+                        );
+                        
+                        quota_data.add_model(
+                            "kiro-monthly-used".to_string(),
+                            0,
+                            format!("{:.2}", current_usage)
+                        );
+                        
+                        quota_data.add_model(
+                            "kiro-trial-limit".to_string(),
+                            if trial_limit > 0.0 { ((trial_limit - trial_current) / trial_limit * 100.0) as i32 } else { 0 },
+                            format!("{:.2}", trial_limit)
+                        );
+                        
+                        quota_data.add_model(
+                            "kiro-trial-used".to_string(),
+                            0,
+                            format!("{:.2}", trial_current)
+                        );
+                        
+                        quota_data.add_model(
+                            "kiro-trial-status".to_string(),
+                            0,
+                            trial_status
+                        );
+                        
+                        crate::modules::logger::log_info(&format!(
+                            "[{}] Kiro credits: Total {:.2}/{:.2} (Monthly: {:.2}/{:.2}, Trial: {:.2}/{:.2}, {}%)",
+                            email, total_remaining, total_limit, 
+                            usage_limit - current_usage, usage_limit,
+                            trial_limit - trial_current, trial_limit,
+                            percentage
+                        ));
+                    }
+                }
+            }
+            
+            // Extract subscription tier
+            if let Some(sub_info) = json_value.get("subscriptionInfo") {
+                if let Some(sub_title) = sub_info.get("subscriptionTitle").and_then(|v| v.as_str()) {
+                    quota_data.subscription_tier = Some(sub_title.to_string());
+                }
+            }
+            
+            Ok((quota_data, None)) // No project_id for Kiro
+        }
+        Err(e) => {
+            crate::modules::logger::log_error(&format!("[{}] Kiro quota fetch failed: {}", email, e));
+            Err(AppError::Unknown(format!("Kiro quota fetch failed: {}", e)))
+        }
+    }
 }
 
 /// 批量查询所有账号配额 (备用功能)

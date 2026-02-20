@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
 use base64::{Engine as _, engine::general_purpose};
 use rand::Rng;
-use chrono;
 
 // Kiro OAuth Configuration
 const KIRO_API_URL: &str = "https://app.kiro.dev";

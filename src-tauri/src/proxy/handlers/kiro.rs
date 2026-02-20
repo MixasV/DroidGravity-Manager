@@ -201,6 +201,23 @@ pub async fn handle_kiro_messages(
             
             error!("Kiro API error {}: {}", status_code, error_text);
             
+            // [LAZY REFRESH] Проверяем на истекший токен
+            // AWS возвращает 403 с "ExpiredToken" или "ExpiredTokenException"
+            let is_expired_token = (status_code == 403 || status_code == 401) 
+                && (error_text.contains("ExpiredToken") 
+                    || error_text.contains("expired") 
+                    || error_text.contains("security token included in the request is expired"));
+            
+            if is_expired_token {
+                error!(
+                    "⚠️  Kiro token expired for account {}. Marking as failed and trying next account.",
+                    email
+                );
+                failed_accounts.insert(account_id);
+                last_error = format!("Kiro token expired: {}", error_text);
+                continue;
+            }
+            
             if should_rotate_account(status_code) {
                 failed_accounts.insert(account_id);
                 last_error = format!("Kiro API error {}: {}", status_code, error_text);

@@ -310,7 +310,7 @@ mod tests {
 /// 
 /// Kiro модели:
 /// - auto (smart router)
-/// - claude-sonnet-4, claude-haiku-4-5, claude-opus-4-5, claude-opus-4-6
+/// - claude-sonnet-4, claude-sonnet-4-5, claude-haiku-4-5, claude-opus-4-5, claude-opus-4-6
 /// - deepseek-3, minimax-2-1, qwen3-coder-next
 /// 
 /// Все остальные модели используют Gemini провайдер
@@ -318,6 +318,7 @@ pub fn determine_provider_by_model(model: &str) -> &'static str {
     // Kiro-specific models
     if model == "auto" 
         || model == "claude-sonnet-4"
+        || model == "claude-sonnet-4-5"  // Factory Droid format
         || model == "claude-haiku-4-5"
         || model == "claude-opus-4-5"
         || model == "claude-opus-4-6"

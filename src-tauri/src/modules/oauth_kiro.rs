@@ -512,7 +512,14 @@ fn cbor_to_json(cbor: ciborium::Value) -> Result<serde_json::Value, String> {
             for (k, v) in map {
                 let key = match k {
                     ciborium::Value::Text(s) => s,
-                    ciborium::Value::Integer(i) => i.to_string(),
+                    ciborium::Value::Integer(i) => {
+                        // Convert Integer to i128 first, then to string
+                        if let Ok(n) = i128::try_from(i) {
+                            n.to_string()
+                        } else {
+                            return Err("Map key integer too large".to_string());
+                        }
+                    }
                     _ => return Err("Map key must be string or integer".to_string()),
                 };
                 json_map.insert(key, cbor_to_json(v)?);

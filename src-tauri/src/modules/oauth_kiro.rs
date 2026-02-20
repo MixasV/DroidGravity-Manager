@@ -429,8 +429,31 @@ pub async fn get_user_usage_and_limits(access_token: &str) -> Result<serde_json:
         &response_bytes[..response_bytes.len().min(100)]
     ));
     
-    let json_value: serde_json::Value = match ciborium::de::from_reader(&response_bytes[..]) {
-        Ok(value) => value,
+    // Try to decode CBOR as raw Value first, then convert to JSON
+    let json_value: serde_json::Value = match ciborium::de::from_reader::<ciborium::Value, _>(&response_bytes[..]) {
+        Ok(cbor_value) => {
+            // Convert CBOR Value to JSON Value
+            match cbor_to_json(cbor_value) {
+                Ok(json) => json,
+                Err(e) => {
+                    let error_msg = format!("Failed to convert CBOR to JSON: {}. Response bytes length: {}", e, response_bytes.len());
+                    crate::modules::logger::log_error(&error_msg);
+                    
+                    // Try to decode as plain JSON as fallback
+                    if let Ok(text) = String::from_utf8(response_bytes.to_vec()) {
+                        crate::modules::logger::log_info(&format!("Response as text: {}", &text[..text.len().min(500)]));
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                            crate::modules::logger::log_info("Successfully parsed as JSON instead of CBOR");
+                            json
+                        } else {
+                            return Err(error_msg);
+                        }
+                    } else {
+                        return Err(error_msg);
+                    }
+                }
+            }
+        }
         Err(e) => {
             let error_msg = format!("Failed to decode CBOR response: {}. Response bytes length: {}", e, response_bytes.len());
             crate::modules::logger::log_error(&error_msg);
@@ -452,6 +475,77 @@ pub async fn get_user_usage_and_limits(access_token: &str) -> Result<serde_json:
     
     crate::modules::logger::log_info("✅ Successfully parsed usage and limits from CBOR");
     Ok(json_value)
+}
+
+/// Convert CBOR Value to JSON Value
+fn cbor_to_json(cbor: ciborium::Value) -> Result<serde_json::Value, String> {
+    match cbor {
+        ciborium::Value::Null => Ok(serde_json::Value::Null),
+        ciborium::Value::Bool(b) => Ok(serde_json::Value::Bool(b)),
+        ciborium::Value::Integer(i) => {
+            if let Ok(n) = i128::try_from(i) {
+                if let Ok(n64) = i64::try_from(n) {
+                    Ok(serde_json::json!(n64))
+                } else {
+                    Ok(serde_json::json!(n.to_string()))
+                }
+            } else {
+                Err("Integer too large".to_string())
+            }
+        }
+        ciborium::Value::Float(f) => Ok(serde_json::json!(f)),
+        ciborium::Value::Bytes(b) => {
+            // Try to decode as UTF-8 string, otherwise base64
+            if let Ok(s) = String::from_utf8(b.clone()) {
+                Ok(serde_json::Value::String(s))
+            } else {
+                Ok(serde_json::Value::String(base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &b)))
+            }
+        }
+        ciborium::Value::Text(s) => Ok(serde_json::Value::String(s)),
+        ciborium::Value::Array(arr) => {
+            let json_arr: Result<Vec<_>, _> = arr.into_iter().map(cbor_to_json).collect();
+            Ok(serde_json::Value::Array(json_arr?))
+        }
+        ciborium::Value::Map(map) => {
+            let mut json_map = serde_json::Map::new();
+            for (k, v) in map {
+                let key = match k {
+                    ciborium::Value::Text(s) => s,
+                    ciborium::Value::Integer(i) => i.to_string(),
+                    _ => return Err("Map key must be string or integer".to_string()),
+                };
+                json_map.insert(key, cbor_to_json(v)?);
+            }
+            Ok(serde_json::Value::Object(json_map))
+        }
+        ciborium::Value::Tag(tag, value) => {
+            // Handle CBOR tags (like datetime)
+            match tag {
+                0 => {
+                    // DateTime string (RFC3339)
+                    cbor_to_json(*value)
+                }
+                1 => {
+                    // DateTime timestamp (Unix epoch)
+                    if let ciborium::Value::Integer(i) = *value {
+                        if let Ok(timestamp) = i64::try_from(i) {
+                            Ok(serde_json::json!(timestamp))
+                        } else {
+                            cbor_to_json(ciborium::Value::Integer(i))
+                        }
+                    } else {
+                        cbor_to_json(*value)
+                    }
+                }
+                _ => {
+                    // Unknown tag, just convert the value
+                    cbor_to_json(*value)
+                }
+            }
+        }
+        _ => Err(format!("Unsupported CBOR type: {:?}", cbor)),
+    }
 }
 
 /// Get Kiro user balance/credits information (deprecated - use get_user_usage_and_limits)

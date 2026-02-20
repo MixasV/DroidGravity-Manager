@@ -44,34 +44,38 @@ pub fn convert_claude_to_kiro(
 
 /// Извлекает model_id из имени модели
 fn extract_model_id(model: &str) -> String {
-    // Маппинг моделей:
-    // claude-sonnet-4-5 -> claude-sonnet-4-5
-    // claude-haiku-4-5 -> claude-haiku-4-5
-    // claude-opus-4-5 -> claude-opus-4-5
-    // claude-opus-4-6 -> claude-opus-4-6
-    // deepseek-3 -> deepseek-3
-    // minimax-2-1 -> minimax-2-1
-    // qwen3-coder-next -> qwen3-coder-next
+    // Маппинг моделей Factory Droid → Kiro:
+    // claude-sonnet-4-5 -> claude-sonnet-4.5 (заменяем последний дефис на точку!)
+    // claude-haiku-4-5 -> claude-haiku-4.5
+    // claude-opus-4-5 -> claude-opus-4.5
+    // claude-opus-4-6 -> claude-opus-4.6
+    // deepseek-3 -> deepseek-3 (без изменений)
+    // minimax-2-1 -> minimax-2-1 (без изменений)
+    // qwen3-coder-next -> qwen3-coder-next (без изменений)
     // auto -> auto (smart router)
     
-    // Убираем префиксы если есть
-    let clean_model = model
-        .trim_start_matches("anthropic.")
-        .trim_start_matches("claude-");
+    // Убираем префикс anthropic. если есть
+    let clean_model = model.trim_start_matches("anthropic.");
     
-    // Если модель начинается с известных префиксов, возвращаем как есть
-    if clean_model.starts_with("sonnet-") 
-        || clean_model.starts_with("haiku-")
-        || clean_model.starts_with("opus-")
-        || clean_model == "auto"
-        || clean_model.starts_with("deepseek-")
-        || clean_model.starts_with("minimax-")
-        || clean_model.starts_with("qwen") {
+    // Для Claude моделей заменяем последний дефис на точку
+    // claude-sonnet-4-5 → claude-sonnet-4.5
+    if clean_model.starts_with("claude-") {
+        // Находим последний дефис
+        if let Some(last_dash_pos) = clean_model.rfind('-') {
+            // Проверяем что после дефиса идет цифра (версия)
+            let after_dash = &clean_model[last_dash_pos + 1..];
+            if !after_dash.is_empty() && after_dash.chars().next().unwrap().is_ascii_digit() {
+                // Заменяем последний дефис на точку
+                let before_dash = &clean_model[..last_dash_pos];
+                return format!("{}.{}", before_dash, after_dash);
+            }
+        }
+        // Если не нашли дефис перед версией, возвращаем как есть
         return clean_model.to_string();
     }
     
-    // По умолчанию используем auto (smart router)
-    "auto".to_string()
+    // Остальные модели возвращаем без изменений
+    clean_model.to_string()
 }
 
 /// Строит контент текущего сообщения из последнего user message
@@ -120,7 +124,7 @@ fn build_history(messages: &[ClaudeMessage]) -> Vec<HistoryMessage> {
             "user" => HistoryMessage {
                 user_input_message: Some(UserInputMessage {
                     content: extract_text_from_message(msg),
-                    model_id: "auto".to_string(),
+                    model_id: extract_model_id("auto"), // Используем auto для истории
                     origin: "AI_EDITOR".to_string(),
                     user_input_message_context: None,
                 }),
@@ -173,10 +177,17 @@ mod tests {
     
     #[test]
     fn test_extract_model_id() {
-        assert_eq!(extract_model_id("claude-sonnet-4-5"), "sonnet-4-5");
-        assert_eq!(extract_model_id("anthropic.claude-opus-4-6"), "opus-4-6");
+        // Claude модели: заменяем последний дефис на точку
+        assert_eq!(extract_model_id("claude-sonnet-4-5"), "claude-sonnet-4.5");
+        assert_eq!(extract_model_id("claude-haiku-4-5"), "claude-haiku-4.5");
+        assert_eq!(extract_model_id("claude-opus-4-5"), "claude-opus-4.5");
+        assert_eq!(extract_model_id("claude-opus-4-6"), "claude-opus-4.6");
+        assert_eq!(extract_model_id("anthropic.claude-opus-4-6"), "claude-opus-4.6");
+        
+        // Остальные модели без изменений
         assert_eq!(extract_model_id("auto"), "auto");
         assert_eq!(extract_model_id("deepseek-3"), "deepseek-3");
-        assert_eq!(extract_model_id("unknown-model"), "auto");
+        assert_eq!(extract_model_id("minimax-2-1"), "minimax-2-1");
+        assert_eq!(extract_model_id("qwen3-coder-next"), "qwen3-coder-next");
     }
 }

@@ -1125,7 +1125,7 @@ pub async fn manual_kiro_token_input(
                 quota_data.subscription_tier
             ));
             
-            // Update account with quota (subscription_tier is already in quota_data)
+            // Update account with quota
             let mut updated_account = final_account.clone();
             updated_account.quota = Some(quota_data);
             

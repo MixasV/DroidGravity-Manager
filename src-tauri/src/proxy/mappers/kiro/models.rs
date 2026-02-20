@@ -8,8 +8,6 @@ use serde_json::Value;
 #[serde(rename_all = "camelCase")]
 pub struct KiroRequest {
     pub conversation_state: ConversationState,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub history: Vec<HistoryMessage>,
     pub profile_arn: String,
 }
 
@@ -20,6 +18,8 @@ pub struct ConversationState {
     pub agent_task_type: String, // "vibe" or "simple-task"
     pub chat_trigger_type: String, // "MANUAL"
     pub conversation_id: String,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub history: Vec<HistoryMessage>,
     pub current_message: CurrentMessage,
 }
 

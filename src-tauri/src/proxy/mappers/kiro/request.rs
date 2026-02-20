@@ -28,6 +28,7 @@ pub fn convert_claude_to_kiro(
             agent_task_type: "vibe".to_string(),
             chat_trigger_type: "MANUAL".to_string(),
             conversation_id: conv_id,
+            history,
             current_message: CurrentMessage {
                 user_input_message: UserInputMessage {
                     content: current_content,
@@ -37,7 +38,6 @@ pub fn convert_claude_to_kiro(
                 },
             },
         },
-        history,
         profile_arn: profile_arn.to_string(),
     }
 }

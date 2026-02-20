@@ -194,23 +194,23 @@
             "provider": "anthropic"
         },
         {
-            "model": "deepseek-3",
-            "id": "custom:Kiro-DeepSeek-3-16",
+            "model": "deepseek-3.2",
+            "id": "custom:Kiro-DeepSeek-3.2-16",
             "index": 16,
             "baseUrl": "http://127.0.0.1:8045",
             "apiKey": "sk-...",
-            "displayName": "Kiro DeepSeek 3 (0.25x credits, Agentic)",
+            "displayName": "Kiro DeepSeek 3.2 (0.25x credits, Agentic)",
             "maxOutputTokens": 32000,
             "noImageSupport": false,
             "provider": "anthropic"
         },
         {
-            "model": "minimax-2-1",
-            "id": "custom:Kiro-Minimax-2.1-17",
+            "model": "minimax-m2.1",
+            "id": "custom:Kiro-Minimax-M2.1-17",
             "index": 17,
             "baseUrl": "http://127.0.0.1:8045",
             "apiKey": "sk-...",
-            "displayName": "Kiro Minimax 2.1 (0.15x credits, Multilingual)",
+            "displayName": "Kiro Minimax M2.1 (0.15x credits, Multilingual)",
             "maxOutputTokens": 32000,
             "noImageSupport": false,
             "provider": "anthropic"

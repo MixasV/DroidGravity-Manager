@@ -326,24 +326,41 @@ pub async fn manual_token_input(
     access_token: &str,
     refresh_token: Option<&str>,
     expires_in: Option<i64>,
+    profile_arn: Option<&str>,
 ) -> Result<KiroTokenResponse, String> {
     crate::modules::logger::log_info("Using manually provided Kiro tokens");
     
     // DO NOT clean tokens - Kiro uses format "token:signature" and both parts are needed!
     // From captured traffic: Bearer aoaAAAAAGmXdh0VsKaWo3YbJXAryPQo....:MGUCMA...
     
+    // Profile ARN MUST be provided or we'll get 403 "User is not authorized"
+    // Profile ARN is returned in GetToken response during OAuth flow
+    // For manual input, user must provide it or we use a default (which may not work)
+    let arn = match profile_arn {
+        Some(arn) if !arn.is_empty() => arn.to_string(),
+        _ => {
+            crate::modules::logger::log_warn(
+                "⚠️  No Profile ARN provided! Using default ARN which may not work.\n\
+                Profile ARN should be obtained from GetToken response or browser DevTools."
+            );
+            // Default ARN for stofelsusana@gmail.com account (may not work for other accounts!)
+            "arn:aws:codewhisperer:us-east-1:699475941385:profile/EHGA3GRVQMUK".to_string()
+        }
+    };
+    
     let tokens = KiroTokenResponse {
         access_token: access_token.to_string(),
         refresh_token: refresh_token.unwrap_or("").to_string(),
         expires_in: expires_in.unwrap_or(3600),
-        profile_arn: "arn:aws:codewhisperer:us-east-1:699475941385:profile/MANUAL".to_string(),
+        profile_arn: arn.clone(),
     };
     
     crate::modules::logger::log_info(&format!(
-        "Manual tokens configured: access_token={}..., refresh_token={}..., expires_in={}s",
+        "Manual tokens configured: access_token={}..., refresh_token={}..., expires_in={}s, profile_arn={}",
         &tokens.access_token[..tokens.access_token.len().min(20)],
         &tokens.refresh_token[..tokens.refresh_token.len().min(20)],
-        tokens.expires_in
+        tokens.expires_in,
+        &tokens.profile_arn
     ));
     
     Ok(tokens)

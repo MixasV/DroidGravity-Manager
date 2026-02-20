@@ -26,6 +26,7 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
     // Manual token input fields for Kiro
     const [manualAccessToken, setManualAccessToken] = useState('');
     const [manualRefreshToken, setManualRefreshToken] = useState('');
+    const [manualProfileArn, setManualProfileArn] = useState('');
 
     // UI State
     const [status, setStatus] = useState<Status>('idle');
@@ -316,7 +317,8 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
             await invoke('manual_kiro_token_input', {
                 accessToken: manualAccessToken.trim(),
                 refreshToken: manualRefreshToken.trim(),
-                expiresIn: 3600 // Default 1 hour
+                expiresIn: 3600, // Default 1 hour
+                profileArn: manualProfileArn.trim() || null
             });
             
             // Refresh accounts list to show the new Kiro account
@@ -626,18 +628,22 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                                 <div className="space-y-4 py-2">
                                     <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
                                         <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
-                                            📋 Manual Token Input from Browser Cookies
+                                            📋 Manual Token Input from Browser DevTools
                                         </h4>
                                         <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-                                            Extract tokens from browser cookies after authorization:
+                                            Extract tokens from GetToken response after authorization:
                                         </p>
                                         <ol className="text-xs text-yellow-600 dark:text-yellow-400 space-y-1 ml-4 list-decimal">
-                                            <li>Visit <a href="https://app.kiro.dev/" target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-800 dark:hover:text-yellow-200">https://app.kiro.dev/</a> and sign in with <strong>Google</strong> (only Google auth is currently supported)</li>
-                                            <li>After successful login, open DevTools (F12) → Application → Cookies → app.kiro.dev</li>
-                                            <li>Find and copy <code className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">AccessToken</code> value</li>
-                                            <li>Find and copy <code className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">RefreshToken</code> value</li>
-                                            <li>Paste both tokens below and click Add Account</li>
+                                            <li>Visit <a href="https://app.kiro.dev/" target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-800 dark:hover:text-yellow-200">https://app.kiro.dev/</a> and sign in with <strong>Google</strong></li>
+                                            <li>Open DevTools (F12) → Network tab → Filter by "GetToken"</li>
+                                            <li>Complete the authorization flow (you'll see GetToken request)</li>
+                                            <li>Click on GetToken request → Response tab</li>
+                                            <li>Copy <code className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">accessToken</code>, <code className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">refreshToken</code>, and <code className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">profileArn</code> values</li>
+                                            <li>Paste all three values below and click Add Account</li>
                                         </ol>
+                                        <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
+                                            ⚠️ Profile ARN is required for requests to work. If you don't provide it, a default ARN will be used which may not work for your account.
+                                        </p>
                                     </div>
                                     
                                     <div className="space-y-3">
@@ -665,6 +671,23 @@ function AddAccountDialog({ onAdd }: AddAccountDialogProps) {
                                                 onChange={(e) => setManualRefreshToken(e.target.value)}
                                                 disabled={status === 'loading' || status === 'success'}
                                             />
+                                        </div>
+                                        
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                                                Profile ARN (Optional):
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="w-full px-3 py-2 text-xs font-mono bg-white dark:bg-base-100 border border-gray-300 dark:border-base-300 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                                                placeholder="arn:aws:codewhisperer:us-east-1:699475941385:profile/XXXXX (leave empty to use default)"
+                                                value={manualProfileArn}
+                                                onChange={(e) => setManualProfileArn(e.target.value)}
+                                                disabled={status === 'loading' || status === 'success'}
+                                            />
+                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                                                💡 Find Profile ARN in DevTools → Network → GetToken response (same place as tokens)
+                                            </p>
                                         </div>
                                     </div>
                                 </div>

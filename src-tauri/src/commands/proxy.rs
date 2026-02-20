@@ -1011,12 +1011,14 @@ pub async fn manual_kiro_token_input(
     access_token: String,
     refresh_token: String,
     expires_in: Option<i64>,
+    profile_arn: Option<String>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     crate::modules::logger::log_info(&format!(
-        "=== MANUAL KIRO TOKEN INPUT ===\nAccess Token: {}...\nRefresh Token: {}...",
+        "=== MANUAL KIRO TOKEN INPUT ===\nAccess Token: {}...\nRefresh Token: {}...\nProfile ARN: {}",
         &access_token[..access_token.len().min(50)],
-        &refresh_token[..refresh_token.len().min(50)]
+        &refresh_token[..refresh_token.len().min(50)],
+        profile_arn.as_deref().unwrap_or("(using default)")
     ));
     
     // Use manual_token_input from oauth_kiro module
@@ -1024,6 +1026,7 @@ pub async fn manual_kiro_token_input(
         &access_token,
         Some(&refresh_token),
         expires_in,
+        profile_arn.as_deref(),
     ).await
         .map_err(|e| {
             crate::modules::logger::log_error(&format!("Manual token input failed: {}", e));

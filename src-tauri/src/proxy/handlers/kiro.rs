@@ -187,9 +187,11 @@ pub async fn handle_kiro_messages(
         if status.is_success() {
             info!("Kiro request successful: {}", email);
             
+            // [AUTO-CONVERSION] Всегда собираем stream и парсим команды
+            // Это нужно для правильной конвертации команд в tool_use blocks
             if is_stream {
-                // Streaming mode - конвертируем AWS Event Stream в Claude SSE
-                return handle_streaming_response(response, claude_req.model.clone(), email).await;
+                // Client wants streaming - собираем stream, парсим команды, и отправляем как streaming
+                return handle_streaming_with_commands(response, claude_req.model.clone(), email).await;
             } else {
                 // Non-streaming mode - собираем stream и конвертируем в Claude JSON
                 return handle_non_streaming_response(response, claude_req.model.clone(), email)
@@ -253,20 +255,40 @@ pub async fn handle_kiro_messages(
     ))
 }
 
-/// Обрабатывает streaming response (AWS Event Stream → Claude SSE)
-async fn handle_streaming_response(
+/// Обрабатывает streaming response с парсингом команд
+/// Собирает весь stream, парсит команды и отправляет правильные SSE события
+async fn handle_streaming_with_commands(
     response: reqwest::Response,
     model: String,
     email: String,
 ) -> Result<Response, (StatusCode, String)> {
-    use futures::stream::StreamExt;
+    use futures::StreamExt;
     
-    let stream = response.bytes_stream();
+    let stream = response.bytes_stream().map(|r| r.map_err(|e| e.to_string()));
+    
+    // Собираем весь stream в текст
+    let full_text = match collect_stream_to_text(stream).await {
+        Ok(text) => text,
+        Err(e) => {
+            error!("Failed to collect stream: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Stream collection error: {}", e),
+            ));
+        }
+    };
+    
+    // Парсим команды из текста
+    use crate::proxy::mappers::kiro::command_parser::parse_commands_from_text;
+    let content_blocks = parse_commands_from_text(&full_text);
     
     // Генерируем ID для сообщения
     let message_id = format!("msg_{}", uuid::Uuid::new_v4().simple());
     
-    // Создаем начальные события
+    // Создаем SSE события
+    let mut sse_events = Vec::new();
+    
+    // 1. message_start
     let message_start = json!({
         "type": "message_start",
         "message": {
@@ -283,88 +305,116 @@ async fn handle_streaming_response(
             }
         }
     });
+    sse_events.push(format!("event: message_start\ndata: {}\n\n", 
+        serde_json::to_string(&message_start).unwrap()));
     
-    let content_block_start = json!({
-        "type": "content_block_start",
-        "index": 0,
-        "content_block": {
-            "type": "text",
-            "text": ""
+    // 2. Отправляем content blocks
+    for (index, block) in content_blocks.iter().enumerate() {
+        use crate::proxy::mappers::claude::models::ContentBlock;
+        
+        match block {
+            ContentBlock::Text { text, .. } => {
+                // content_block_start
+                let block_start = json!({
+                    "type": "content_block_start",
+                    "index": index,
+                    "content_block": {
+                        "type": "text",
+                        "text": ""
+                    }
+                });
+                sse_events.push(format!("event: content_block_start\ndata: {}\n\n", 
+                    serde_json::to_string(&block_start).unwrap()));
+                
+                // content_block_delta
+                let block_delta = json!({
+                    "type": "content_block_delta",
+                    "index": index,
+                    "delta": {
+                        "type": "text_delta",
+                        "text": text
+                    }
+                });
+                sse_events.push(format!("event: content_block_delta\ndata: {}\n\n", 
+                    serde_json::to_string(&block_delta).unwrap()));
+                
+                // content_block_stop
+                let block_stop = json!({
+                    "type": "content_block_stop",
+                    "index": index
+                });
+                sse_events.push(format!("event: content_block_stop\ndata: {}\n\n", 
+                    serde_json::to_string(&block_stop).unwrap()));
+            }
+            ContentBlock::ToolUse { id, name, input, .. } => {
+                // content_block_start
+                let block_start = json!({
+                    "type": "content_block_start",
+                    "index": index,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": id,
+                        "name": name
+                    }
+                });
+                sse_events.push(format!("event: content_block_start\ndata: {}\n\n", 
+                    serde_json::to_string(&block_start).unwrap()));
+                
+                // content_block_delta with input
+                let block_delta = json!({
+                    "type": "content_block_delta",
+                    "index": index,
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": serde_json::to_string(input).unwrap()
+                    }
+                });
+                sse_events.push(format!("event: content_block_delta\ndata: {}\n\n", 
+                    serde_json::to_string(&block_delta).unwrap()));
+                
+                // content_block_stop
+                let block_stop = json!({
+                    "type": "content_block_stop",
+                    "index": index
+                });
+                sse_events.push(format!("event: content_block_stop\ndata: {}\n\n", 
+                    serde_json::to_string(&block_stop).unwrap()));
+            }
+            _ => {
+                // Другие типы блоков (thinking и т.д.) пока не поддерживаем
+                debug!("Skipping unsupported content block type in streaming");
+            }
+        }
+    }
+    
+    // 3. message_delta
+    let has_tool_use = content_blocks.iter().any(|b| matches!(b, 
+        crate::proxy::mappers::claude::models::ContentBlock::ToolUse { .. }));
+    
+    let stop_reason = if has_tool_use { "tool_use" } else { "end_turn" };
+    
+    let message_delta = json!({
+        "type": "message_delta",
+        "delta": {
+            "stop_reason": stop_reason,
+            "stop_sequence": null
+        },
+        "usage": {
+            "output_tokens": 0
         }
     });
+    sse_events.push(format!("event: message_delta\ndata: {}\n\n", 
+        serde_json::to_string(&message_delta).unwrap()));
     
-    let message_start_sse = format!("event: message_start\ndata: {}\n\n", 
-        serde_json::to_string(&message_start).unwrap());
-    let content_block_start_sse = format!("event: content_block_start\ndata: {}\n\n", 
-        serde_json::to_string(&content_block_start).unwrap());
+    // 4. message_stop
+    let message_stop = json!({
+        "type": "message_stop"
+    });
+    sse_events.push(format!("event: message_stop\ndata: {}\n\n", 
+        serde_json::to_string(&message_stop).unwrap()));
     
-    // Создаем начальный chunk с обоими событиями
-    let initial_chunk = format!("{}{}", message_start_sse, content_block_start_sse);
-    
-    let claude_stream = futures::stream::once(async move {
-        Ok::<Bytes, String>(Bytes::from(initial_chunk))
-    })
-    .chain(stream.flat_map(move |chunk_result| {
-        match chunk_result {
-            Ok(chunk) => {
-                // Парсим AWS Event Stream
-                match parse_event_stream(&chunk) {
-                    Ok(messages) => {
-                        // Конвертируем каждое сообщение в Claude SSE chunk
-                        let chunks: Vec<Result<Bytes, String>> = messages
-                            .into_iter()
-                            .filter_map(|msg| convert_event_to_claude_chunk(&msg))
-                            .map(Ok)
-                            .collect();
-                        
-                        futures::stream::iter(chunks)
-                    }
-                    Err(e) => {
-                        error!("Failed to parse AWS Event Stream: {}", e);
-                        futures::stream::iter(vec![Err(format!("Parse error: {}", e))])
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Stream error: {}", e);
-                futures::stream::iter(vec![Err(format!("Stream error: {}", e))])
-            }
-        }
-    }))
-    .chain(futures::stream::once(async {
-        // Добавляем завершающие события
-        let content_block_stop = json!({
-            "type": "content_block_stop",
-            "index": 0
-        });
-        
-        let message_delta = json!({
-            "type": "message_delta",
-            "delta": {
-                "stop_reason": "end_turn",
-                "stop_sequence": null
-            },
-            "usage": {
-                "output_tokens": 0
-            }
-        });
-        
-        let message_stop = json!({
-            "type": "message_stop"
-        });
-        
-        let content_block_stop_sse = format!("event: content_block_stop\ndata: {}\n\n", 
-            serde_json::to_string(&content_block_stop).unwrap());
-        let message_delta_sse = format!("event: message_delta\ndata: {}\n\n", 
-            serde_json::to_string(&message_delta).unwrap());
-        let message_stop_sse = format!("event: message_stop\ndata: {}\n\n", 
-            serde_json::to_string(&message_stop).unwrap());
-        
-        Ok::<Bytes, String>(Bytes::from(format!("{}{}{}", 
-            content_block_stop_sse, message_delta_sse, message_stop_sse)))
-    }));
-    
-    let body = Body::from_stream(claude_stream);
+    // Объединяем все события в один stream
+    let full_response = sse_events.join("");
     
     Ok(Response::builder()
         .header("Content-Type", "text/event-stream")
@@ -373,7 +423,7 @@ async fn handle_streaming_response(
         .header("X-Accel-Buffering", "no")
         .header("X-Account-Email", &email)
         .header("X-Mapped-Model", &model)
-        .body(body)
+        .body(Body::from(full_response))
         .unwrap())
 }
 

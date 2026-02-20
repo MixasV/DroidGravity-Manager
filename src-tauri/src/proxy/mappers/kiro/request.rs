@@ -44,18 +44,31 @@ pub fn convert_claude_to_kiro(
 
 /// Извлекает model_id из имени модели
 fn extract_model_id(model: &str) -> String {
-    // Маппинг моделей Factory Droid → Kiro:
-    // claude-sonnet-4-5 -> claude-sonnet-4.5 (заменяем последний дефис на точку!)
-    // claude-haiku-4-5 -> claude-haiku-4.5
-    // claude-opus-4-5 -> claude-opus-4.5
-    // claude-opus-4-6 -> claude-opus-4.6
-    // deepseek-3 -> deepseek-3 (без изменений)
-    // minimax-2-1 -> minimax-2-1 (без изменений)
-    // qwen3-coder-next -> qwen3-coder-next (без изменений)
-    // auto -> auto (smart router)
+    // Маппинг моделей Factory Droid → Kiro API (проверено тестами):
+    // 
+    // РАБОТАЮЩИЕ МОДЕЛИ:
+    // - auto -> auto (smart router)
+    // - claude-sonnet-4 -> claude-sonnet-4
+    // - claude-sonnet-4-5 -> claude-sonnet-4.5 (заменяем дефис на точку!)
+    // - claude-haiku-4-5 -> claude-haiku-4.5
+    // - claude-opus-4-5 -> claude-opus-4.5
+    // - claude-opus-4-6 -> claude-opus-4.6
+    // - deepseek-3 -> deepseek-3.2 (правильная версия!)
+    // - minimax-2-1 -> minimax-m2.1 (правильная версия с префиксом m!)
+    // - qwen3-coder-next -> qwen3-coder-next (без изменений)
     
     // Убираем префикс anthropic. если есть
     let clean_model = model.trim_start_matches("anthropic.");
+    
+    // DeepSeek: deepseek-3 -> deepseek-3.2
+    if clean_model.starts_with("deepseek-3") || clean_model.starts_with("DeepSeek-3") {
+        return "deepseek-3.2".to_string();
+    }
+    
+    // MiniMax: minimax-2-1 -> minimax-m2.1
+    if clean_model.starts_with("minimax-2") || clean_model.starts_with("MiniMax-2") {
+        return "minimax-m2.1".to_string();
+    }
     
     // Для Claude моделей заменяем последний дефис на точку
     // claude-sonnet-4-5 → claude-sonnet-4.5
@@ -74,8 +87,8 @@ fn extract_model_id(model: &str) -> String {
         return clean_model.to_string();
     }
     
-    // Остальные модели возвращаем без изменений
-    clean_model.to_string()
+    // Остальные модели (qwen3-coder-next, auto) возвращаем без изменений
+    clean_model.to_string();
 }
 
 /// Строит контент текущего сообщения из последнего user message
@@ -178,16 +191,23 @@ mod tests {
     #[test]
     fn test_extract_model_id() {
         // Claude модели: заменяем последний дефис на точку
+        assert_eq!(extract_model_id("claude-sonnet-4"), "claude-sonnet-4");
         assert_eq!(extract_model_id("claude-sonnet-4-5"), "claude-sonnet-4.5");
         assert_eq!(extract_model_id("claude-haiku-4-5"), "claude-haiku-4.5");
         assert_eq!(extract_model_id("claude-opus-4-5"), "claude-opus-4.5");
         assert_eq!(extract_model_id("claude-opus-4-6"), "claude-opus-4.6");
         assert_eq!(extract_model_id("anthropic.claude-opus-4-6"), "claude-opus-4.6");
         
-        // Остальные модели без изменений
-        assert_eq!(extract_model_id("auto"), "auto");
-        assert_eq!(extract_model_id("deepseek-3"), "deepseek-3");
-        assert_eq!(extract_model_id("minimax-2-1"), "minimax-2-1");
+        // DeepSeek: используем правильную версию 3.2
+        assert_eq!(extract_model_id("deepseek-3"), "deepseek-3.2");
+        assert_eq!(extract_model_id("DeepSeek-3"), "deepseek-3.2");
+        
+        // MiniMax: используем правильную версию m2.1
+        assert_eq!(extract_model_id("minimax-2-1"), "minimax-m2.1");
+        assert_eq!(extract_model_id("MiniMax-2-1"), "minimax-m2.1");
+        
+        // Qwen и auto: без изменений
         assert_eq!(extract_model_id("qwen3-coder-next"), "qwen3-coder-next");
+        assert_eq!(extract_model_id("auto"), "auto");
     }
 }

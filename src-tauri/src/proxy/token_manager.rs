@@ -887,16 +887,17 @@ impl TokenManager {
                     if now >= token.timestamp - 300 {
                         tracing::debug!("账号 {} 的 token 即将过期，正在刷新...", token.email);
                         
-                        // [NEW] Check provider and use appropriate refresh method
+                    // [NEW] Check provider and use appropriate refresh method
+                        // ВАЖНО: Kiro refresh НЕ РАБОТАЕТ без client_secret!
+                        // AWS Cognito требует client_secret для refresh токенов,
+                        // но мы его не знаем. Пользователю нужно заново добавить аккаунт через час.
                         let refresh_result = if token.provider == "kiro" {
-                            crate::modules::oauth_kiro::refresh_access_token(&token.refresh_token)
-                                .await
-                                .map(|kiro_resp| crate::modules::oauth::TokenResponse {
-                                    access_token: kiro_resp.access_token,
-                                    refresh_token: Some(kiro_resp.refresh_token),
-                                    expires_in: kiro_resp.expires_in,
-                                    token_type: "Bearer".to_string(),
-                                })
+                            tracing::warn!(
+                                "⚠️  Kiro token expired for {}, but refresh is not supported (missing client_secret). User needs to re-add account.",
+                                token.email
+                            );
+                            // Skip refresh for Kiro, return error to trigger account rotation
+                            Err("Kiro token refresh not supported (missing client_secret)".to_string())
                         } else {
                             crate::modules::oauth::refresh_access_token(&token.refresh_token)
                                 .await
@@ -1287,15 +1288,16 @@ impl TokenManager {
                 tracing::debug!("账号 {} 的 token 即将过期，正在刷新...", token.email);
 
                 // [NEW] Check provider and use appropriate refresh method
+                // ВАЖНО: Kiro refresh НЕ РАБОТАЕТ без client_secret!
+                // AWS Cognito требует client_secret для refresh токенов,
+                // но мы его не знаем. Пользователю нужно заново добавить аккаунт через час.
                 let refresh_result = if token.provider == "kiro" {
-                    crate::modules::oauth_kiro::refresh_access_token(&token.refresh_token)
-                        .await
-                        .map(|kiro_resp| crate::modules::oauth::TokenResponse {
-                            access_token: kiro_resp.access_token,
-                            refresh_token: Some(kiro_resp.refresh_token),
-                            expires_in: kiro_resp.expires_in,
-                            token_type: "Bearer".to_string(),
-                        })
+                    tracing::warn!(
+                        "⚠️  Kiro token expired for {}, but refresh is not supported (missing client_secret). User needs to re-add account.",
+                        token.email
+                    );
+                    // Skip refresh for Kiro, return error to trigger account rotation
+                    Err("Kiro token refresh not supported (missing client_secret)".to_string())
                 } else {
                     crate::modules::oauth::refresh_access_token(&token.refresh_token)
                         .await

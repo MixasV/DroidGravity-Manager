@@ -1114,6 +1114,41 @@ pub async fn manual_kiro_token_input(
             e
         })?;
     
+    crate::modules::logger::log_info("=== FETCHING KIRO QUOTA ===");
+    
+    // Fetch quota for Kiro account
+    match crate::modules::quota::fetch_quota(&final_account.token.access_token, &final_account.email).await {
+        Ok((quota_data, subscription_tier)) => {
+            crate::modules::logger::log_info(&format!(
+                "✅ Quota fetched successfully: {} models, tier: {:?}",
+                quota_data.models.len(),
+                subscription_tier
+            ));
+            
+            // Update account with quota
+            let mut updated_account = final_account.clone();
+            updated_account.quota = Some(quota_data);
+            if let Some(tier) = subscription_tier {
+                updated_account.subscription_tier = Some(tier);
+            }
+            
+            // Save with quota
+            crate::modules::account::save_account(&updated_account)
+                .map_err(|e| {
+                    crate::modules::logger::log_error(&format!("Failed to save quota: {}", e));
+                    e
+                })?;
+            
+            final_account = updated_account;
+        }
+        Err(e) => {
+            crate::modules::logger::log_warn(&format!(
+                "⚠️  Failed to fetch quota: {}\nAccount added without quota info",
+                e
+            ));
+        }
+    }
+    
     crate::modules::logger::log_info(&format!(
         "=== KIRO ACCOUNT ADDED SUCCESSFULLY VIA MANUAL TOKENS ===\nEmail: {}\nID: {}",
         final_account.email,

@@ -516,16 +516,8 @@ pub async fn refresh_access_token(refresh_token: &str) -> Result<KiroTokenRespon
         expires_in
     ));
     
-    // Get user info with new token to extract profile ARN
-    let user_info = get_user_info(&new_access_token).await?;
-    
-    // Extract profile ARN from user_id (format: arn:aws:iam::...)
-    let profile_arn = if user_info.user_id.starts_with("arn:aws:") {
-        user_info.user_id.clone()
-    } else {
-        // Fallback: construct ARN from user_id
-        format!("arn:aws:iam::123456789012:user/{}", user_info.user_id)
-    };
+    // Use a default profile ARN for Kiro (we don't need to fetch user info just for refresh)
+    let profile_arn = "arn:aws:codewhisperer:us-east-1:699475941385:profile/KIRO".to_string();
     
     Ok(KiroTokenResponse {
         access_token: new_access_token,
